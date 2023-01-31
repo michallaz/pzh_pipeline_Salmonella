@@ -65,7 +65,7 @@ RUN echo 'export PATH="/opt/docker/EToKi:$PATH"' >> ~/.bashrc
 RUN echo 'export PATH="/opt/docker/SeqSero2/bin:$PATH"'  >> ~/.bashrc
 RUN echo 'export PATH="/opt/docker/EToKi/externals/ncbi-blast-2.8.1+/bin:$PATH"' >> ~/.bashrc
 RUN echo 'export PATH="/opt/docker/EToKi/externals/:$PATH"' >> ~/.bashrc
-RUN . ~/.bashrc
+
 # Sciaganie MLST 7 genowy ze strony enterobase - https://enterobase.warwick.ac.uk/schemes/Salmonella.Achtman7GeneMLST/
 RUN mkdir -p /Achtman7GeneMLST_entero
 WORKDIR /Achtman7GeneMLST_entero
@@ -132,7 +132,17 @@ WORKDIR /opt/docker
 
 # instalacja samego resfindera
 RUN pip install resfinder
+## dodawanie sciezki do baz resfindera i do kma
+RUN echo 'export PATH="/opt/docker/kma:$PATH"' >> ~/.bashrc
+RUN echo 'export CGE_RESFINDER_RESGENE_DB="/opt/docker/resfinder_db"' >> ~/.bashrc
+RUN echo 'export CGE_RESFINDER_RESPOINT_DB="/opt/docker/pointfinder_db"' >>  ~/.bashrc
+RUN echo 'export CGE_DISINFINDER_DB="/opt/docker/disinfinder_db"' >> ~/.bashrc
 
+# instalacja spifinder-a 
+RUN git clone https://bitbucket.org/genomicepidemiology/spifinder.git
+RUN chmod a+x spifinder/spifinder.py
+## dodanie spifindera do PATH
+RUN echo 'export PATH="/opt/docker/spifinder:$PATH"' >> ~/.bashrc
 # Hiercc
 RUN pip install pHierCC
 
@@ -159,6 +169,8 @@ RUN pip install .
 ### Uwaga bazy mozna pobraz tez bezposrednio ze strony http://cmprod1.cibio.unitn.it/biobakery4/metaphlan_databases/
 ### baza buduje sie dobre 2h
 RUN mkdir -p /bowtie_db
+#dodajemy do PATH w trakcie budowania kontenera ta sciezke aby widziany byl bowtie-build
+ENV PATH /opt/docker/EToKi/externals/:$PATH
 RUN metaphlan --install --nproc 60 --bowtie2db /bowtie_db
 
 WORKDIR /data

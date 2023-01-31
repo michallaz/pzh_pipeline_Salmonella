@@ -49,9 +49,18 @@ pHierCC -p /cgMLST2_entero/profiles.list -a /cgMLST2_entero/profile_output.npy -
 echo 'Pointfinder' ten wymaga pandas 1.0.5
 python -m resfinder -o resfinder_out -s "s.enterica"  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifq ${FILENAME}*
 #virulence
+echo 'Analyzing virulence islands for Salmonella'
+mkdir tmp
+mkdir wyniki_spifinder
+spifinder.py -i ${F1} ${F2} -o wyniki_spifinder -tmp tmp -mp kma -p /opt/docker/spifinder_db/ -x -t 0.95
+
+# wyciaganie plasmidow 
+
+# szukanie circular contigs
 
 #skladanie z mapowaniem na genom referencyjny  i powtorzenie cgMLST ?
+#TO DO to jest dosc proste potrzebny jest tylko genom referencyjny
 
 # wyciaganie sekwencji bialek, budowanie struktur wybranych bialek ? tylko tych z mutacjami w genomie referencyjnym ?
-
+#TO DO to tez jest proste wystarczy po mapowaniu na genom referencyjny wyciagnac nextstrainem 
 
