@@ -25,7 +25,7 @@ EToKi.py assemble --pe prep_out_L1_R1.fastq.gz,prep_out_L1_R2.fastq.gz --se prep
 ### ocenianie genomu na podstawie tego co opisano w grancie i jest z defaultu w enterobase, czy genom spelnia zalozone kryteria
 
 echo 'Etoki MLST 7 genomwy'
-EToKi.py MLSType -i asm_out/etoki.fasta -r /Achtman7GeneMLST_entero/refset.fasta -k test_sample -o MLSTout.txt -d /enterobase/MLST_etoki/MLST_database.tab
+EToKi.py MLSType -i asm_out/etoki.fasta -r /Achtman7GeneMLST_entero/references.fasta -k test_sample -o MLSTout.txt -d /Achtman7GeneMLST_entero/MLST_database.tab
 
 # cgMLST
 # sciezki do bazy cgMLST ustawiono wewnatrz podskryptu run_blastn_ver5.sh
@@ -52,7 +52,12 @@ python -m resfinder -o resfinder_out -s "s.enterica"  -l 0.6 -t 0.8 --acquired -
 echo 'Analyzing virulence islands for Salmonella'
 mkdir tmp
 mkdir wyniki_spifinder
-spifinder.py -i ${F1} ${F2} -o wyniki_spifinder -tmp tmp -mp kma -p /opt/docker/spifinder_db/ -x -t 0.95
+# wybralem opcje jak na stronie (inne niz default w skrypcoe pythonnowym)
+spifinder.py -i ${F1} ${F2} -o wyniki_spifinder -tmp tmp -mp kma -p /opt/docker/spifinder_db/ -x -t 0.95 -l 0.6
+
+# testowo gmls z cge
+mkdir cgmls_cge
+python3 cgMLST.py -i ${F1},${F2} -s salmonella -db /opt/docker/cgmlstfinder_db/ -o cgmls_cge/ -t tmp/ -k /opt/docker/kma/kma -n /opt/docker/cgmlstfinder/make_nj_tree.py
 
 # wyciaganie plasmidow 
 

@@ -8,7 +8,7 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 RUN apt-get update --fix-missing && \
     apt-get install python3.8 python3-pip default-jre curl unzip wget vim bc htop git gcc zlib1g-dev libbz2-dev libcurl4-gnutls-dev libssl-dev liblzma-dev python3-pycurl screen -y
 
-RUN pip install ete3 numba numpy==1.23.4 pandas==1.0.5 biopython==1.73 psutil pysam
+RUN pip install ete3 numba numpy==1.23.4 pandas==1.0.5 biopython==1.73 psutil pysam cgecore
 RUN pip install sklearn
 # bez podania konkretnego numpy nie instaluje sie numba, sklearn w trakcie budowania zwraca error, a nastepnie i tak sie poprawnie instaluje
 WORKDIR /usr/bin
@@ -84,11 +84,20 @@ RUN /opt/docker/EToKi/EToKi.py MLSTdb -i all_allels.fasta -s MLST_Achtman_ref.fa
 RUN mkdir -p /cgMLST2_entero
 WORKDIR /cgMLST2_entero
 
-RUN wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/cgMLST_salmonella.tar
-RUN tar -xf cgMLST_salmonella.tar
-RUN gunzip *gz
+#RUN wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/cgMLST_salmonella.tar # nie korzystamy archiwum nie bylo
+# updatowane od 2017 roku
+#RUN tar -xf cgMLST_salmonella.tar
+RUN curl -s  https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/ >> log
+RUN cat log  | grep fasta | grep -v MLST | sed s'/<\|>/ /'g | awk '{print $3}' >> to_download.txt
+RUN echo profiles.list.gz >> to_download.txt
+RUN for K in `cat to_download.txt`; do wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/${K}; gunzip ${K}; done
+
 RUN for K in `ls *fasta`; do /opt/docker/EToKi/externals/ncbi-blast-2.8.1+/bin/makeblastdb -in ${K} -dbtype nucl; done
-COPY all_3002_allele.txt /cgMLST2_entero/
+RUN cat to_download.txt | grep fasta |   sed s'/.gz//'g >> all_3002_allele.txt
+RUN rm log to_download.txt
+RUN cat *fasta >> all_allels.fasta
+
+#COPY all_3002_allele.txt /cgMLST2_entero/
 #RUN wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/profiles.list.gz
 #RUN gunzip profiles.list.gz
 
@@ -172,6 +181,28 @@ RUN mkdir -p /bowtie_db
 #dodajemy do PATH w trakcie budowania kontenera ta sciezke aby widziany byl bowtie-build
 ENV PATH /opt/docker/EToKi/externals/:$PATH
 RUN metaphlan --install --nproc 60 --bowtie2db /bowtie_db
+
+
+# cgMLST z CGE ? wtedy musimy zainstalowac prodigal github czy apt ? budowanie z githuba zadzialalo bez problemu
+WORKDIR /opt/docker
+RUN git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder.git
+RUN git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git
+RUN git clone https://github.com/hyattpd/Prodigal.git
+
+# budowanie bazy dla cgmlstfindera w oparciu o najnowsze pliki z enterobase
+WORKDIR /opt/docker/cgmlstfinder_dbi/scripts
+RUN mkdir -p /opt/docker/cgmlstfinder_dbi/scripts/custom_db
+RUN mkdir -p /opt/docker/cgmlstfinder_dbi/scripts/custom_out
+RUN python3 cgmlst_dl.py -o /opt/docker/cgmlstfinder_dbi/scripts/custom_out -db /opt/docker/cgmlstfinder_dbi/scripts/custom_db  -k /opt/docker/kma/kma_index
+
+## to sciaga baze ze strony CGE
+## tak tylko kod sciagnal baze z 18 pazdziernika, wiec lepiej budowac baze samemu na podstawie najnowszej wersji z enterobase co zrobiono wyzej
+# RUN python3 INSTALL.py -s salmonella 
+
+# instalcja prodigal
+WORKDIR /opt/docker/Prodigal
+RUN make install
+RUN echo 'export PATH="/opt/docker/cgmlstfinder:$PATH"' >> ~/.bashrc
 
 WORKDIR /data
 COPY all_functions_salmonella.py run_blastn_ver5.sh master_script_kontener.sh prep_hierCC.py /data/
