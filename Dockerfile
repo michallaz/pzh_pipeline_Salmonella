@@ -9,7 +9,7 @@ RUN apt-get update --fix-missing && \
     apt-get install python3.8 python3-pip default-jre curl unzip wget vim bc htop git gcc zlib1g-dev libbz2-dev libcurl4-gnutls-dev libssl-dev liblzma-dev python3-pycurl screen -y
 
 RUN pip install ete3 numba numpy==1.23.4 pandas==1.0.5 biopython==1.73 psutil pysam cgecore
-RUN pip install sklearn
+RUN pip install scikit-learn
 # bez podania konkretnego numpy nie instaluje sie numba, sklearn w trakcie budowania zwraca error, a nastepnie i tak sie poprawnie instaluje
 WORKDIR /usr/bin
 RUN ln -s python3 python
@@ -166,8 +166,14 @@ RUN cp pHierCC.py /usr/local/lib/python3.8/dist-packages/pHierCC/pHierCC.py
 RUN cp getDistance.py /usr/local/lib/python3.8/dist-packages/pHierCC/getDistance.py
 
 ## budowanie profilu na podstawie cgMLST 
+### UWAGA na razie pHierCC nie dziala dla wiecej niz 100k profili (teraz w entero jest ponad 300k), dla testow puszczam 2 wersje 
+### w celu weryfikacji odtwarzania kodu po przepisaniu go na dask-a (jesli sie uda)
+
 WORKDIR /cgMLST2_entero
-RUN pHierCC -p profiles.list -o profile_output -n 60
+RUN head -70000 profiles.list >> profiles_70k.list
+RUN head -20 profiles.list >> profiles_20.list
+RUN pHierCC -p profiles_70k.list -o profile_output_70k -n 30
+RUN pHierCC -p profiles_20.list -o profile_output_20 -n 1
 
 # Metaphlan
 WORKDIR /opt/docker
@@ -190,10 +196,11 @@ RUN git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git
 RUN git clone https://github.com/hyattpd/Prodigal.git
 
 # budowanie bazy dla cgmlstfindera w oparciu o najnowsze pliki z enterobase
-WORKDIR /opt/docker/cgmlstfinder_dbi/scripts
-RUN mkdir -p /opt/docker/cgmlstfinder_dbi/scripts/custom_db
-RUN mkdir -p /opt/docker/cgmlstfinder_dbi/scripts/custom_out
-RUN python3 cgmlst_dl.py -o /opt/docker/cgmlstfinder_dbi/scripts/custom_out -db /opt/docker/cgmlstfinder_dbi/scripts/custom_db  -k /opt/docker/kma/kma_index
+WORKDIR /opt/docker/cgmlstfinder_db/scripts
+RUN mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_db
+RUN mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_out
+
+RUN python3 cgmlst_dl.py -o /opt/docker/cgmlstfinder_db/scripts/custom_out -db /opt/docker/cgmlstfinder_db/scripts/custom_db  -k /opt/docker/kma/kma_index
 
 ## to sciaga baze ze strony CGE
 ## tak tylko kod sciagnal baze z 18 pazdziernika, wiec lepiej budowac baze samemu na podstawie najnowszej wersji z enterobase co zrobiono wyzej
