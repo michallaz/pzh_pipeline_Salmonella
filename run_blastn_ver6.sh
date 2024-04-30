@@ -2,18 +2,19 @@
 # ver 0.1
 
 GENOM=$1
-
+MAX_PROC=$2
 run_blastn () {
 	if [ ${1} == 'STY1774' ]; then
-		blastn -query ${2} -db /cgMLST2_entero/${1}.fasta -out blastn_tmp_${1}.tab -outfmt 6 -max_target_seqs 3 -word_size 5 
+		# przerazlwie wolny ale ten allel jest ekstremalnie krotki
+		/blast/bin/blastn -query ${2} -db /cgMLST2_entero/${1}.fasta -out blastn_tmp_${1}.tab -outfmt 6 -max_target_seqs 5 -word_size 5 
 	else
-		 blastn -query ${2} -db /cgMLST2_entero/${1}.fasta -out blastn_tmp_${1}.tab -outfmt 6 -max_target_seqs 3
+		/blast/bin/blastn -query ${2} -db /cgMLST2_entero/${1}.fasta -out blastn_tmp_${1}.tab -outfmt 6 -max_target_seqs 5
 	fi
 	return 0
 }
 
 export -f run_blastn
-cat /cgMLST2_entero/all_3002_allele.txt | xargs -I {} --max-procs=50 bash -c "run_blastn {} ${GENOM}"
+cat /cgMLST2_entero/all_3002_allele.txt | xargs -I {} --max-procs=${MAX_PROC} bash -c "run_blastn {} ${GENOM}"
 
 for K in `cat /cgMLST2_entero/all_3002_allele.txt`
 do

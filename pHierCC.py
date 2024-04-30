@@ -33,13 +33,13 @@ def prepare_mat(profile_file) :
     allele_columns = np.array([i == 0 or (not h.startswith('#')) for i, h in enumerate(mat[0])])
     mat = mat[1:, allele_columns]
     try :
-        mat = mat.astype(int)
+        mat = mat.astype(np.int16)
         mat = mat[mat.T[0] > 0]
         names = mat.T[0].copy()
     except :
         names = mat.T[0].copy()
         mat.T[0] = np.arange(1, mat.shape[0]+1)
-        mat = mat.astype(int)
+        mat = mat.astype(np.int16)
     mat[mat < 0] = 0
     return mat, names
 

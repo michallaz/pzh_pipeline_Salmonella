@@ -5,12 +5,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 #ENV PATH /opt/conda/bin:$PATH
 
+RUN apt-get update --fix-missing && \
+    apt-get install python3.8 python3-pip default-jre curl unzip wget vim bc htop git gcc zlib1g-dev libbz2-dev libcurl4-gnutls-dev libssl-dev liblzma-dev python3-pycurl screen -y
 
-
-RUN apt-get update --fix-missing && apt upgrade -y && \
-    apt-get install build-essential python3.8 python3-pip default-jre curl unzip wget vim bc htop git gcc zlib1g-dev libbz2-dev libcurl4-gnutls-dev libssl-dev liblzma-dev python3-pycurl screen iqtree -y
-
-RUN pip install ete3 numba numpy==1.23.4 pandas==1.0.5 biopython==1.73 psutil pysam cgecore packaging tables==3.7.0 h5py
+RUN pip install ete3 numba numpy==1.23.4 pandas==1.0.5 biopython==1.73 psutil pysam cgecore
 RUN pip install scikit-learn
 # bez podania konkretnego numpy nie instaluje sie numba, sklearn w trakcie budowania zwraca error, a nastepnie i tak sie poprawnie instaluje
 WORKDIR /usr/bin
@@ -27,8 +25,8 @@ RUN git clone https://github.com/zheminzhou/EToKi.git
 WORKDIR /opt/docker/EToKi
 
 # podmieniamy bledna linijke przy instalacji pilon przez etoki
-#RUN cat modules/configure.py | sed s/"subprocess.Popen('curl -Lo pilon-1.23.jar {0}'.split(), stderr=subprocess.PIPE).communicate()"/"subprocess.Popen('curl -Lo pilon-1.23.jar {0}'.format(url).split(), stderr=subprocess.PIPE).communicate()"/g > modules/configure2.py
-#RUN cp modules/configure2.py modules/configure.py
+RUN cat modules/configure.py | sed s/"subprocess.Popen('curl -Lo pilon-1.23.jar {0}'.split(), stderr=subprocess.PIPE).communicate()"/"subprocess.Popen('curl -Lo pilon-1.23.jar {0}'.format(url).split(), stderr=subprocess.PIPE).communicate()"/g > modules/configure2.py
+RUN cp modules/configure2.py modules/configure.py
 
 # nie sciagamy kraken-a tutaj ale w wersji finalnej bez tego sie nie obejdzie 
 # sciaganie bazy kraken-owej opisane jest w /home/michall/kraken2/README_KRAKEN_INSTALL
@@ -36,7 +34,7 @@ WORKDIR /opt/docker/EToKi
 # przy starcie kontenera po prostu mapujemy baze z dysku na kontener przez "-v"
 # baza krakenowa wazy 240 Gb  
 RUN mkdir -p /kraken2_sdb
-RUN python EToKi.py configure --install --usearch /opt/docker/usearch11.0.667_i86linux32 --link_krakenDB /kraken2_sdb/ --path iqtree=/usr/bin/iqtree
+RUN python EToKi.py configure --install --usearch /opt/docker/usearch11.0.667_i86linux32 --link_krakenDB /kraken2_sdb/
 
 #SEqsero
 WORKDIR /opt/docker
@@ -89,18 +87,15 @@ WORKDIR /cgMLST2_entero
 #RUN wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/cgMLST_salmonella.tar # nie korzystamy archiwum nie bylo
 # updatowane od 2017 roku
 #RUN tar -xf cgMLST_salmonella.tar
+RUN curl -s  https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/ >> log
+RUN cat log  | grep fasta | grep -v MLST | sed s'/<\|>/ /'g | awk '{print $3}' >> to_download.txt
+RUN echo profiles.list.gz >> to_download.txt
+RUN for K in `cat to_download.txt`; do wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/${K}; gunzip ${K}; done
 
-### Na razie z tego nie korzystam wiec nie sciagam bazy
-# RUN curl -s  https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/ >> log
-# RUN cat log  | grep fasta | grep -v MLST | sed s'/<\|>/ /'g | awk '{print $3}' >> to_download.txt
-# RUN echo profiles.list.gz >> to_download.txt
-# RUN for K in `cat to_download.txt`; do wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/${K}; gunzip ${K}; done
-
-# RUN for K in `ls *fasta`; do /opt/docker/EToKi/externals/ncbi-blast-2.8.1+/bin/makeblastdb -in ${K} -dbtype nucl; done
-# RUN cat to_download.txt | grep fasta |   sed s'/.gz//'g >> all_3002_allele.txt
-# RUN sed -i  s'/.fasta//' all_3002_allele.txt
-# RUN rm log to_download.txt
-# RUN cat *fasta >> all_allels.fasta
+RUN for K in `ls *fasta`; do /opt/docker/EToKi/externals/ncbi-blast-2.8.1+/bin/makeblastdb -in ${K} -dbtype nucl; done
+RUN cat to_download.txt | grep fasta |   sed s'/.gz//'g >> all_3002_allele.txt
+RUN rm log to_download.txt
+RUN cat *fasta >> all_allels.fasta
 
 #COPY all_3002_allele.txt /cgMLST2_entero/
 #RUN wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/profiles.list.gz
@@ -170,30 +165,28 @@ COPY getDistance.py pHierCC.py  /opt/docker/pHierCC_tmp/
 RUN cp pHierCC.py /usr/local/lib/python3.8/dist-packages/pHierCC/pHierCC.py
 RUN cp getDistance.py /usr/local/lib/python3.8/dist-packages/pHierCC/getDistance.py
 
-### budowanie profilu na podstawie cgMLST 
+## budowanie profilu na podstawie cgMLST 
 ### UWAGA na razie pHierCC nie dziala dla wiecej niz 100k profili (teraz w entero jest ponad 300k), dla testow puszczam 2 wersje 
 ### w celu weryfikacji odtwarzania kodu po przepisaniu go na dask-a (jesli sie uda)
 
-### NIE ROBIMY DBAZA JEST ZA DUZA 
 WORKDIR /cgMLST2_entero
-# RUN head -70000 profiles.list >> profiles_70k.list
-# RUN head -20 profiles.list >> profiles_20.list
-# RUN pHierCC -p profiles_70k.list -o profile_output_70k -n 30
-# RUN pHierCC -p profiles_20.list -o profile_output_20 -n 1
+RUN head -70000 profiles.list >> profiles_70k.list
+RUN head -20 profiles.list >> profiles_20.list
+RUN pHierCC -p profiles_70k.list -o profile_output_70k -n 30
+RUN pHierCC -p profiles_20.list -o profile_output_20 -n 1
 
-### Metaphlan
-### NIE INSTALUJEMY POKI CO ZA DUZO DANYCH 
-# WORKDIR /opt/docker
-# RUN git clone https://github.com/biobakery/MetaPhlAn.git 
-# WORKDIR /opt/docker/MetaPhlAn
-# RUN pip install .
-### Baza do Metaphlan /uwaga 24 Gb/
+# Metaphlan
+WORKDIR /opt/docker
+RUN git clone https://github.com/biobakery/MetaPhlAn.git 
+WORKDIR /opt/docker/MetaPhlAn
+RUN pip install .
+## Baza do Metaphlan /uwaga 24 Gb/
 ### Uwaga bazy mozna pobraz tez bezposrednio ze strony http://cmprod1.cibio.unitn.it/biobakery4/metaphlan_databases/
 ### baza buduje sie dobre 2h
-# RUN mkdir -p /bowtie_db
-### dodajemy do PATH w trakcie budowania kontenera ta sciezke aby widziany byl bowtie-build
-# ENV PATH /opt/docker/EToKi/externals/:$PATH
-# RUN metaphlan --install --nproc 60 --bowtie2db /bowtie_db
+RUN mkdir -p /bowtie_db
+#dodajemy do PATH w trakcie budowania kontenera ta sciezke aby widziany byl bowtie-build
+ENV PATH /opt/docker/EToKi/externals/:$PATH
+RUN metaphlan --install --nproc 60 --bowtie2db /bowtie_db
 
 
 # cgMLST z CGE ? wtedy musimy zainstalowac prodigal github czy apt ? budowanie z githuba zadzialalo bez problemu
@@ -207,8 +200,7 @@ WORKDIR /opt/docker/cgmlstfinder_db/scripts
 RUN mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_db
 RUN mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_out
 
-# Tego NIE ROBIMY POKI CO BO ZZERA 80GB
-# RUN python3 cgmlst_dl.py -o /opt/docker/cgmlstfinder_db/scripts/custom_out -db /opt/docker/cgmlstfinder_db/scripts/custom_db  -k /opt/docker/kma/kma_index
+RUN python3 cgmlst_dl.py -o /opt/docker/cgmlstfinder_db/scripts/custom_out -db /opt/docker/cgmlstfinder_db/scripts/custom_db  -k /opt/docker/kma/kma_index
 
 ## to sciaga baze ze strony CGE
 ## tak tylko kod sciagnal baze z 18 pazdziernika, wiec lepiej budowac baze samemu na podstawie najnowszej wersji z enterobase co zrobiono wyzej
@@ -220,35 +212,9 @@ RUN make install
 RUN echo 'export PATH="/opt/docker/cgmlstfinder:$PATH"' >> ~/.bashrc
 
 WORKDIR /data
-COPY all_functions_salmonella.py run_blastn_ver6.sh master_script_kontener.sh prep_hierCC.py /data/
+COPY all_functions_salmonella.py run_blastn_ver5.sh master_script_kontener.sh prep_hierCC.py /data/
 #ENTRYPOINT [ "/usr/bin/tini", "--" ]
-RUN pip install pandas==1.0.5  xlrd
+RUN pip install pandas==1.0.5 
 # to wyzej powinno rozwalic resfindera ( resfinder 4.2.5 has requirement pandas>=1.4.2 ), ale dziala tak i tak za to sistr bez wersji 1.4.2 nie pojdzie
-# xlrd potrebne jest to czytania xls a baza VFDB ma plik z opisami w arkuszu excelowym
-
-#pobieranie pilon-a
-RUN wget -O /opt/docker/EToKi/externals/pilon.jar https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar
-COPY coverage_filter.py calculate_stats.py /opt/docker/EToKi/externals
-CMD ["/bin/bash"]
-
-# dociaganie bazy sistr
-
-RUN wget https://sairidapublic.blob.core.windows.net/downloads/sistr/database/SISTR_V_1.1_db.tar.gz
-RUN tar -zxvf SISTR_V_1.1_db.tar.gz  -C /usr/local/lib/python3.8/dist-packages/sistr; rm SISTR_V_1.1_db.tar.gz
-RUN touch  /usr/local/lib/python3.8/dist-packages/sistr/dbstatus.txt
-ENV PATH $PATH:/opt/docker/EToKi/externals/
-
-# Etoki ma wlasnego blasta ale sciagamy nowa werszje
-# 
-RUN wget https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.15.0/ncbi-blast-2.15.0+-x64-linux.tar.gz
-RUN mkdir -p /blast
-RUN tar -zxf ncbi-blast-2.15.0+-x64-linux.tar.gz -C /blast --strip-components=1
-# moj skrypt run_blast explicite bedzie puszczal blasta z /blast/bin wiec nie ma potrzeby dodawania do PATH
-# poza tym nie wiem jak inne kompnenty zareaguja na 2 wersje blasta sciagana przeze mnie i ta z Etoki/externals
-# btw na pewno podczas instalacji etoki mozna wskazac gdzie jest blast wiec 
-# docelowo blast z /externals moze byc blastem systemowym
-# ENV PATH="/blast/bin:$PATH"
-
-
 CMD ["/bin/bash"]
 #ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]
