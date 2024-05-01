@@ -412,6 +412,27 @@ process run_VFDB {
 
 }
 
+process run_spifinder {
+  container  = 'salmonella_illumina:2.0'
+  tag "Predicting virulence islands dla sample $x"
+  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  cpus params.cpus
+  input:
+  tuple val(x), path(fasta)
+  output:
+  tuple val(x), path('spifinder_results/*')
+
+  script:
+  """
+  mkdir spifinder_results # program wymaga tworzenia katalogu samodzielnie
+  # -mp opcja jak szukamy wysp kma jest gdy inputem sa dane surowe, blastn gdy podajemy zlozony genom/contigi
+  # -p sciezka do bazy, sciagana w trakcie budowy kontenera
+  # -l i -t to parametrty na alignment coverage i seq id
+  # -x to rozszerzony output
+  python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
+  """
+}
+
 workflow pilon_first {
 take:
 initial_scaffold_inner
@@ -574,4 +595,5 @@ run_pointfinder(final_assembly)
 run_cgMLST(final_assembly)
 prokka_out = run_prokka(final_assembly)
 run_VFDB(prokka_out)
+run_spifinder(final_assembly)
 }
