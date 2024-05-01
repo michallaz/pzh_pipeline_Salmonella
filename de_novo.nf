@@ -352,6 +352,66 @@ process run_cgMLST {
   """
 }
 
+process run_prokka {
+  // Propkka to soft do przewidywania genow w genomie (zwraca tez sekwencje bialek i annotace)
+  // Ktory pod spodem korzysta z prodigal to przewiddywnia genow
+    // Komentarz czemu uzywa prodigal 2.6.3 a nie 3.0 
+    // Prodigal sluzy do predykcji genow w genomie
+    // Uzywamy wersji 2.6.3 choc na ich wiki caly czas mowia o 3.0, ktorej nie moge znalezc
+    // Moze ma to zwiazek z issues w ktorych facet pisze ze 3.0 to work in progress 
+    // https://github.com/hyattpd/Prodigal/issues/45
+  
+  // instalacja prokka jest meczaca ale korzystamy z wystawionego przez autorow obrazu 
+
+
+  // opcja --metagenome w prokka jest wywolaniem prodigal z opcja -p meta
+  // opcja meta in which Prodigal applies pre-calculated training files to the provided input sequence and predicts genes based on the best results.
+  //  i winnym miejscu
+  // Isolated, short sequences (<100kbp) such as plasmids, phages, and viruses should generally be analyzed using meta mode
+  // Testowe puszczenie z opcja meta i bez niej nawet na dosc stabilnym genomie jak sample 151 daje troche inne wyniki
+
+  // opcja --compliant Force Genbank/ENA/DDJB compliance: --addgenes --mincontiglen 200 --centre XXX (default OFF)
+  // opcja --kingdom Bacteria jest defaultem zaklada jaki typ genomu analizujemy
+
+  container  = 'staphb/prokka:latest'
+  tag "Predicting genes dla sample $x"
+  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  cpus params.cpus
+  input:
+  tuple val(x), path(fasta)
+  output:
+  tuple val(x), path('prokka_out/prokka_out*gff'), path('prokka_out/*faa'), path('prokka_out/*.ffn'), path('prokka_out/*.tsv')
+  script:
+  """
+  prokka --metagenome --cpus ${params.cpus} --outdir prokka_out --prefix prokka_out --compliant --kingdom Bacteria $fasta 
+  """
+}
+
+process run_VFDB {
+  // Baza z czynnikami wirulencji w roznych bakteriach w tym salmonelli
+  // Przygotowana baza z instrukcja jak ja przygotowac jest w /mnt/sda1/michall/db/VFDB/README
+  container  = 'salmonella_illumina:2.0'
+  containerOptions '--volume /mnt/sda1/michall/db/VFDB:/db'
+  // Ponownie montujemy na sztyno do /db bo taka lokalizacje na sztywno ma wpisany moj skrypt
+  tag "Predicting VirulenceFactors dla sample $x"
+  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  cpus params.cpus
+  input:
+  // inputem jest output procesu run_prokka
+  tuple val(x), path(gff), path(faa), path(ffn), path(tsv)
+  output:
+  tuple val(x), path('VFDB_summary.txt')
+  script:
+  """
+  SPEC='Salmonella' # wpradzie jest juz paramter params.species, ale baza VFDB go nie zrozumie.
+  PIDENT=80 # minimalna identycznosc sekwencyjna aby stwierdzic ze jest hit 
+  COV=80 # minimalne pokrycie query i hitu aby stwierdzic ze jest hit 
+  EVAL=0.01  # maksymalne e-value
+  /opt/docker/EToKi/externals/run_VFDB.sh $ffn ${task.cpus} \${SPEC} \${PIDENT} \${EVAL} \${COV}
+  """
+
+}
+
 workflow pilon_first {
 take:
 initial_scaffold_inner
@@ -512,4 +572,6 @@ run_Seqsero(final_assembly)
 run_sistr(final_assembly)
 run_pointfinder(final_assembly)
 run_cgMLST(final_assembly)
+prokka_out = run_prokka(final_assembly)
+run_VFDB(prokka_out)
 }

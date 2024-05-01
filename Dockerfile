@@ -228,8 +228,6 @@ RUN pip install pandas==1.0.5  xlrd
 
 #pobieranie pilon-a
 RUN wget -O /opt/docker/EToKi/externals/pilon.jar https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar
-COPY coverage_filter.py calculate_stats.py /opt/docker/EToKi/externals
-CMD ["/bin/bash"]
 
 # dociaganie bazy sistr
 
@@ -249,6 +247,8 @@ RUN tar -zxf ncbi-blast-2.15.0+-x64-linux.tar.gz -C /blast --strip-components=1
 # docelowo blast z /externals moze byc blastem systemowym
 # ENV PATH="/blast/bin:$PATH"
 
+# Pozostale skrypty
+COPY coverage_filter.py calculate_stats.py run_VFDB.sh /opt/docker/EToKi/externals
 
 CMD ["/bin/bash"]
 #ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]
