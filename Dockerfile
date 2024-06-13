@@ -247,6 +247,14 @@ RUN tar -zxf ncbi-blast-2.15.0+-x64-linux.tar.gz -C /blast --strip-components=1
 # docelowo blast z /externals moze byc blastem systemowym
 # ENV PATH="/blast/bin:$PATH"
 
+# Etoki sciaga tez sam flye, ale wole 3mac najnowsza wersje
+RUN git clone https://github.com/fenderglass/Flye
+WORKDIR /data/Flye
+RUN make 
+# NIE uzywac -j  przy make bo nie buduja sie wszystkie binarki
+# NIE dodajemy do path bo jest juz flye z Etoki w PATH 
+#ENV PATH $PATH:/data/Flye/bin  
+WORKDIR /data
 # Pozostale skrypty
 COPY coverage_filter.py calculate_stats.py run_VFDB.sh /opt/docker/EToKi/externals
 

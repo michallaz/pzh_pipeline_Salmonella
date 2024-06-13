@@ -1,8 +1,14 @@
 params.cpus = 24
 params.min_coverage_ratio = 0.1 // Etoki odrzuca contigi ktorych srednie pokrycie jest mniejsze niz 0.2 globalnego pokrycia
 // my nie jestesmy tak ostrzy dajemy 0.1 co tlumaczymy uzyciem innego alignera
+
+params.min_coverage_ratio_nanopore = 0.1 // Ten parametr nie jest jeszcze uzywany ale posluzy do nanopre'a
+// Po zobaczeniu wyniku testowych danych
+
 params.species = 's.enterica' // inne mozliwosci to c.jejuni c.coli e.coli . Gatungi do resfindera
 
+params.reads = '/mnt/sda1/michall/Salmonella/*_R{1,2}_001.fastq.gz'
+params.machine = 'Illumina'
 
 process check_etoki {
   // Testowa funkcja
@@ -38,7 +44,8 @@ process clean_fastq {
   // Prosta funkcja zaimplementowa w etoki do czyszczenia plikow fastq, ma na celu rozdzielenie odczytow ktore sa sparowane
   // od tych ktore pary nie maja, trimmowanie odczytow na podstawie jakosci, zmiana nazwy odczytow .
   // Ta funkcja generalnie mimikuje dzialanie trimmomatic-a. Wiec teoretycznie mozna uzyc jego
-  
+  // Default na trimming to quality 6
+
   container  = 'salmonella_illumina:2.0'
   tag "Fixing fastq dla sample $x"
   input:
@@ -51,9 +58,10 @@ process clean_fastq {
   read_1 = reads[0]
   read_2 = reads[1]
   """
-  python /opt/docker/EToKi/EToKi.py prepare --pe ${read_1},${read_2} -p prep_out
+  python /opt/docker/EToKi/EToKi.py prepare --pe ${read_1},${read_2} -p prep_out -c ${params.cpus}
   """
 }
+
 
 process spades {
   // Funkcja do odpalania spadesa
@@ -114,7 +122,7 @@ process merge_bams {
   // potrzebna jesli uzyje jednak uzyje Hapo-G
   
   container  = 'salmonella_illumina:2.0'
-  tag "Lacznie bam-ow dla sample $x"
+  tag "Merging bam files for sample $x"
   input:
   tuple val(x), path(bam1), path(bam2)
   output:
@@ -134,7 +142,7 @@ process _run_pilon {
 
   container  = 'salmonella_illumina:2.0' 
   // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
-  tag "Pilon dla sample $x"
+  tag "Pilon for sample $x"
   publishDir "pilon_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(bam1), path(bam2), path('genomic_fasta.fasta')
@@ -169,10 +177,10 @@ process _run_pilon {
 }
 process run_pilon {
   // Poki co zastepujemy hapo-g pilonem
-
+  // Dokladne uzycie pilona jest tu https://github.com/broadinstitute/pilon/wiki/Requirements-&-Usage
   container  = 'salmonella_illumina:2.0'
   // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
-  tag "Pilon dla sample $x"
+  tag "Pilon for sample $x"
   // publishDir "pilon_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(bam1), path(bam2), path('genomic_fasta.fasta')
@@ -186,7 +194,7 @@ process run_pilon {
   /opt/docker/EToKi/externals/samtools index  $bam2
 
   # wywolanie pilon-a
-  java -jar /opt/docker/EToKi/externals/pilon.jar  --genome genomic_fasta.fasta --frags $bam1 --unpaired $bam2 --output pilon_polish --vcf --changes --outdir pilon_bwa
+  java -jar /opt/docker/EToKi/externals/pilon.jar --threads ${params.cpus} --genome genomic_fasta.fasta --frags $bam1 --unpaired $bam2 --output pilon_polish --vcf --changes --outdir pilon_bwa
  
   # przygotowanie outputu
   # cat pilon_bwa/pilon_polish.fasta | awk  -v ALA=${x} 'BEGIN{OFS=""}; {if(\$0 ~ />/) print \$0,"_", ALA; else print \$0}' >> last_pilon.fasta
@@ -195,10 +203,12 @@ process run_pilon {
   """
 }
 
+
 process run_coverage {
   // Liczenie pokrycia dla kazdego contiga polaczona z filtorwanie odczytow
+  // Przy uzyciu NASZEGO skryptu
   container  = 'salmonella_illumina:2.0'
-  tag "Coverage-based filtering dla sample $x"
+  tag "Coverage-based filtering for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(bam1), path('genomic_fasta.fasta')
@@ -217,7 +227,7 @@ process run_coverage {
 process extract_final_stats {
 // skopiowac z etoki
   container  = 'salmonella_illumina:2.0'
-  tag "Calculating basic statistics dla sample $x"
+  tag "Calculating basic statistics for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(fasta)
@@ -234,7 +244,7 @@ process extract_final_stats {
 process run_7MLST {
   // wykorzystujemy bezposrednio Etoki, 7-genomy MLST w tym nie da sie pomylic
   container  = 'salmonella_illumina:2.0'
-  tag "Predicting MLST dla sample $x"
+  tag "Predicting MLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(fasta)
@@ -248,7 +258,7 @@ process run_7MLST {
 
 process run_Seqsero {
   container  = 'salmonella_illumina:2.0'
-  tag "Predicting OH dla sample $x with Seqsero"
+  tag "Predicting OH for sample $x with Seqsero"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   input:
@@ -266,7 +276,7 @@ process run_Seqsero {
 
 process run_sistr {
   container  = 'salmonella_illumina:2.0'
-  tag "Predicting OH dla sample $x with Sistr"
+  tag "Predicting OH for sample $x with Sistr"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   input:
@@ -293,8 +303,9 @@ process run_sistr {
 
 process run_pointfinder {
   container  = 'salmonella_illumina:2.0'
-  tag "Predicting microbial resistance dla sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  tag "Predicting microbial resistance for sample $x"
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: '*' 
+  // pattern mowi co kopiowac
   input:
   tuple val(x), path(fasta)
   output:
@@ -333,7 +344,7 @@ process run_cgMLST {
   // podmontujemy z zewnatrz cgMLST, montujemy na /cgMLST2_entero bo skrypt run_blastn_ver6.sh
   // ma tak za hard-kodowane i nie chce tego zmieniac poki co
   containerOptions '--volume /mnt/sda1/michall/db/cgMLST_30042024:/cgMLST2_entero'
-  tag "Predicting cgMLST dla sample $x"
+  tag "Predicting cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   input:
@@ -374,7 +385,7 @@ process run_prokka {
   // opcja --kingdom Bacteria jest defaultem zaklada jaki typ genomu analizujemy
 
   container  = 'staphb/prokka:latest'
-  tag "Predicting genes dla sample $x"
+  tag "Predicting genes for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   input:
@@ -393,7 +404,7 @@ process run_VFDB {
   container  = 'salmonella_illumina:2.0'
   containerOptions '--volume /mnt/sda1/michall/db/VFDB:/db'
   // Ponownie montujemy na sztyno do /db bo taka lokalizacje na sztywno ma wpisany moj skrypt
-  tag "Predicting VirulenceFactors dla sample $x"
+  tag "Predicting VirulenceFactors for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   input:
@@ -414,7 +425,7 @@ process run_VFDB {
 
 process run_spifinder {
   container  = 'salmonella_illumina:2.0'
-  tag "Predicting virulence islands dla sample $x"
+  tag "Predicting virulence islands for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   input:
@@ -432,6 +443,125 @@ process run_spifinder {
   python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
   """
 }
+
+// FUNKCJE DODANE DLA ANALIZY NANOPORE //
+
+process run_flye {
+  // nano-raw to input dla wersji przed guppym 5+ z duza liczba bledow
+  // -g to estymowana wielkosc ocekiwanego genomu
+  // -t to liczba watkow CPU
+  // -i to liczba powtorzec wygladzania genomy
+  // --no-alt-contig to informacja aby nie podawac haplotypow gdyby byly, w koncu salmonella to monoploid ...
+
+  container  = 'salmonella_illumina:2.0'
+  tag "Predicting scaffold with flye for sample $x"
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
+  cpus params.cpus
+  input:
+  tuple val(x), path(fastq_gz)
+  output:
+  tuple val(x), path('output/assembly.fasta') 
+  
+  script:
+  """
+  # /data/Flye to sciezka z Flye instalowanego z github, uwaga
+  # w kontenerze tez jest flye instalowant przez etoki i ten jest w PATH
+  /data/Flye/bin/flye --nano-raw ${fastq_gz} -g 6m -o output -t ${params.cpus} -i 3 --no-alt-contig
+
+  """
+ 
+}
+
+process clean_fastq_SE {
+  // Prosta funkcja zaimplementowa w etoki do czyszczenia plikow fastq, wersja dla Single End
+  // wiec de facto pozostawiam tylko quality trim
+  // Zmieniono quality trimming na 5
+  container  = 'salmonella_illumina:2.0'
+  tag "Fixing fastq dla sample $x"
+  input:
+  tuple val(x), path(read)
+  output:
+  tuple val(x), path('prep_out_L1_SE.fastq.gz')
+  script:
+  """
+  python /opt/docker/EToKi/EToKi.py prepare --se ${read} -c ${params.cpus} -q 5 -p prep_out
+  """
+}
+
+
+
+process run_minimap2 {
+  // Proces do mapowania odczytow na scaffold
+  tag "Remapping of reads to predicted scaffold for sample $x"
+  container  = 'salmonella_illumina:2.0' 
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
+  input:
+  tuple val(x), path(fasta), path(reads) 
+  output:
+  tuple val(x), path('sorted.bam'), path(fasta)
+  script:
+  """
+  # minmap jest zarowno w PATH z etoki/externals jak i w /data/Flye/bin
+
+  minimap2 -a -x map-ont -t ${params.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${params.cpus} -o sorted.bam -
+  
+  """
+}
+
+
+process run_pilon_nanopore {
+  // De facto slave run_pilon, ale akcpetujemy jeden bam
+  // Do testow nie wiem jak program zachowa sie na danych nanopre ktore sa kiepskie
+  // Moze wykladzac medaka ?
+
+  container  = 'salmonella_illumina:2.0'
+  // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
+  tag "Pilon for sample $x"
+  // publishDir "pilon_wyniki/${x}", mode: 'copy'
+  input:
+  tuple val(x), path(bam1), path(fasta)
+  output:
+  tuple val(x), path('latest_pilon.fasta'), path('latest_pilon.changes'), emit: ALL
+  tuple val(x), path('latest_pilon.fasta'), emit: ONLY_GENOME
+  script:
+  """
+  # indeksacja bam-ow
+  /opt/docker/EToKi/externals/samtools index  $bam1
+
+  # wywolanie pilon-a
+  java -jar /opt/docker/EToKi/externals/pilon.jar  --threads ${params.cpus} --defaultqual 5 --genome $fasta --unpaired $bam1 --output pilon_polish --vcf --changes --outdir pilon_out
+
+  # przygotowanie outputu
+  # cat pilon_bwa/pilon_polish.fasta | awk  -v ALA=${x} 'BEGIN{OFS=""}; {if(\$0 ~ />/) print \$0,"_", ALA; else print \$0}' >> last_pilon.fasta
+  cat pilon_out/pilon_polish.fasta >> latest_pilon.fasta
+  cp  pilon_out/pilon_polish.changes latest_pilon.changes
+  """
+}
+
+// SUB WORKFLOWS NANOPORE //
+
+workflow pilon_first_nanopore {
+// pilona puscimy tylko raz bo zakladam ze flye po cos te rundy filtrowania robi 
+take:
+initial_scaffold_inner
+processed_fastq_inner_SE
+main:
+// laczymy kanaly ze scaffoldem genomu i odczytmai
+for_remaping_SE_inner = initial_scaffold_inner.join(processed_fastq_inner_SE, by : 0, remainder : true)
+// mapujemy odczyty na genom
+single_bams_and_genome = run_minimap2(for_remaping_SE_inner)
+
+// laczymy bam-a z mapowania z genomem
+run_pilon_nanopore(single_bams_and_genome)
+
+emit:
+// sub pipeline zwraca identyfikator probki + nowy scaffold
+// bamy sa zbedne bo w kolejenj iteracji musza byc remapowane na poprawiony genom
+run_pilon_nanopore.out.ONLY_GENOME
+}
+
+
+// SUB WORKFLOWS ILLUMINA //
 
 workflow pilon_first {
 take:
@@ -538,18 +668,14 @@ pokrycie.ONLY_GENOME
 }
 
 
-workflow sub1 {
-take:
-data1
-main:
-data1 | view
 
-}
+// MAIN WORKFLOW //
 
 workflow {
 
+if(params.machine == 'Illumina') {
 Channel
-  .fromFilePairs('/mnt/sda1/michall/Salmonella/*_R{1,2}_001.fastq.gz')
+  .fromFilePairs(params.reads)
   .set {initial_fastq}
 
 //initial_fastq | check_etoki | view
@@ -596,4 +722,24 @@ run_cgMLST(final_assembly)
 prokka_out = run_prokka(final_assembly)
 run_VFDB(prokka_out)
 run_spifinder(final_assembly)
+} 
+
+else {
+
+log.info "Nanopore"
+log.info params.reads
+
+
+// Dla spojnosci z illumina niech kanal inital_fastq tez niech bedzie tuplem z pierwszym elementem jako identyfikatorem
+Channel
+  .fromPath(params.reads)
+  .map {it -> tuple(it.getName().split("\\.")[0], it)}
+  .set {initial_fastq}
+
+// initial_fastq | view
+processed_fastq = clean_fastq_SE(initial_fastq)
+initial_scaffold = run_flye(processed_fastq)
+pilon_first_nanopore(initial_scaffold, processed_fastq)
 }
+} 
+
