@@ -2,13 +2,15 @@ params.cpus = 24
 params.min_coverage_ratio = 0.1 // Etoki odrzuca contigi ktorych srednie pokrycie jest mniejsze niz 0.2 globalnego pokrycia
 // my nie jestesmy tak ostrzy dajemy 0.1 co tlumaczymy uzyciem innego alignera
 
-params.min_coverage_ratio_nanopore = 0.1 // Ten parametr nie jest jeszcze uzywany ale posluzy do nanopre'a
-// Po zobaczeniu wyniku testowych danych
+// params.min_coverage_ratio_nanopore = 0.1 // Ten parametr nie jest moze  posluzy do nanopre'a
 
 params.species = 's.enterica' // inne mozliwosci to c.jejuni c.coli e.coli . Gatungi do resfindera
 
 params.reads = '/mnt/sda1/michall/Salmonella/*_R{1,2}_001.fastq.gz'
 params.machine = 'Illumina'
+
+params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/" // na sztywno bo nie chce mi sie tego ustawiac za kazdym razem
+params.quality_initial = 5 // Parametr stosowany aktualnie tylko przez krakena
 
 process check_etoki {
   // Testowa funkcja
@@ -444,6 +446,43 @@ process run_spifinder {
   """
 }
 
+
+process run_kraken2_illumina {
+  // modul wziety z pipeline do SARS
+  // poprawilem tylko pare rzeczy zwiazane z parametrami i kontenerami ktore u mnie sa inne
+  // kraken2 instalowany jest przez ETOKI i jest w path kontenera do salmonelli
+  tag "kraken2:${x}"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
+  publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "summary_kraken.txt"
+  containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
+  maxForks 5
+
+  input:
+  tuple val(x), path(reads)
+
+  output:
+  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt')
+
+  script:
+  """
+  kraken2 --db /home/external_databases/kraken2 \
+          --report report_kraken2.txt \
+          --threads ${params.cpus} \
+          --gzip-compressed \
+          --minimum-base-quality ${params.quality_initial} \
+          --use-names ${reads[0]} ${reads[1]} >> report_kraken2_individualreads.txt 2>&1
+  # parse kraken extract two most abundant species
+  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w S | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
+  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w S | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
+  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w S | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
+  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w S | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
+
+  echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> summary_kraken.txt
+  """
+}
+
 // FUNKCJE DODANE DLA ANALIZY NANOPORE //
 
 process run_flye {
@@ -508,6 +547,24 @@ process run_minimap2 {
   """
 }
 
+process run_minimap2_2nd {
+  // Proces do mapowania odczytow na scaffold
+  // W nanopre w jednym workflow uzywam go 2 razy wiec musze zrobic ta glupia kopie
+  tag "Remapping of reads to predicted scaffold for sample $x"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
+  input:
+  tuple val(x), path(fasta), path(reads)
+  output:
+  tuple val(x), path('sorted.bam'), path(fasta)
+  script:
+  """
+  # minmap jest zarowno w PATH z etoki/externals jak i w /data/Flye/bin
+
+  minimap2 -a -x map-ont -t ${params.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${params.cpus} -o sorted.bam -
+
+  """
+}
 
 process run_pilon_nanopore {
   // De facto slave run_pilon, ale akcpetujemy jeden bam
@@ -517,11 +574,11 @@ process run_pilon_nanopore {
   container  = 'salmonella_illumina:2.0'
   // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
   tag "Pilon for sample $x"
-  // publishDir "pilon_wyniki/${x}", mode: 'copy'
+  publishDir "pilon_wyniki/${x}", mode: 'copy', pattern: 'latest_pilon.*'
   input:
   tuple val(x), path(bam1), path(fasta)
   output:
-  tuple val(x), path('latest_pilon.fasta'), path('latest_pilon.changes'), emit: ALL
+  // tuple val(x), path('latest_pilon.fasta'), path('latest_pilon.changes'), emit: ALL
   tuple val(x), path('latest_pilon.fasta'), emit: ONLY_GENOME
   script:
   """
@@ -538,6 +595,41 @@ process run_pilon_nanopore {
   """
 }
 
+process run_kraken2_nanopore {
+  // kopia processu do illuminy, ale z uwzglednieniem ze jest tylko jeden plik z odczytami
+  tag "kraken2:${x}"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
+  publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "summary_kraken.txt"
+  containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
+  maxForks 5
+
+  input:
+  tuple val(x), path(reads)
+
+  output:
+  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt')
+
+  script:
+  """
+  kraken2 --db /home/external_databases/kraken2 \
+          --report report_kraken2.txt \
+          --threads ${params.cpus} \
+          --gzip-compressed \
+          --minimum-base-quality ${params.quality_initial} \
+          --use-names ${reads} >> report_kraken2_individualreads.txt 2>&1
+  # parse kraken extract two most abundant species
+  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w S | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
+  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w S | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
+  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w S | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
+  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w S | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
+
+  echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> summary_kraken.txt
+  """
+}
+
+
 // SUB WORKFLOWS NANOPORE //
 
 workflow pilon_first_nanopore {
@@ -552,12 +644,19 @@ for_remaping_SE_inner = initial_scaffold_inner.join(processed_fastq_inner_SE, by
 single_bams_and_genome = run_minimap2(for_remaping_SE_inner)
 
 // laczymy bam-a z mapowania z genomem
-run_pilon_nanopore(single_bams_and_genome)
+final_assembly = run_pilon_nanopore(single_bams_and_genome)
+
+// liczymy pokrycia i fitrujemy slabe contig
+
+for_remaping_polished_assembly = final_assembly.join(processed_fastq_inner_SE, by : 0, remainder : true)
+single_bams_and_polished_genome = run_minimap2_2nd(for_remaping_polished_assembly)
+
+final_assembly_filtered = run_coverage(single_bams_and_polished_genome)
 
 emit:
 // sub pipeline zwraca identyfikator probki + nowy scaffold
 // bamy sa zbedne bo w kolejenj iteracji musza byc remapowane na poprawiony genom
-run_pilon_nanopore.out.ONLY_GENOME
+final_assembly_filtered.ONLY_GENOME
 }
 
 
@@ -678,25 +777,14 @@ Channel
   .fromFilePairs(params.reads)
   .set {initial_fastq}
 
-//initial_fastq | check_etoki | view
+// kraken2 analiza kontmainacji innymi organizmami
+run_kraken2_illumina(initial_fastq)
 
+// Czyszczenie fastq jak w etoki
 processed_fastq = clean_fastq(initial_fastq)
 
-// processed_fastq.All_path | view_output | view()
-
+// Pierwsyz scaffold
 initial_scaffold = spades(processed_fastq.All_path)
-
-// for_remaping_PE = initial_scaffold.join(processed_fastq.PE_path, by : 0, remainder : true)
-// for_remaping_SE = initial_scaffold.join(processed_fastq.SE_path, by : 0, remainder : true)
-//for_remaping_PE.view()
-// paired_bams = bwa_paired(for_remaping_PE)
-// single_bams = bwa_single(for_remaping_SE)
-// merged_bams = paired_bams.join(single_bams, by : 0, remainder : true)
-// merged_bams_and_scaffold = merged_bams.join(initial_scaffold,  by : 0, remainder : true)
-// merged_bams_and_scaffold | view
-// pilon_initial = run_pilon(merged_bams_and_scaffold)
-// laczymy wyniki pilona z kana
-
 
 // Puszczamy 3-krotne wygladzanie pilon-em
 first_polish_run = pilon_first(initial_scaffold, processed_fastq.PE_path, processed_fastq.SE_path)
@@ -709,10 +797,35 @@ third_polish_run = pilon_third(second_polish_run, processed_fastq.PE_path, proce
 // Analize robimy jednak moim kodem
 
 final_assembly = calculate_coverage(third_polish_run, processed_fastq.PE_path, processed_fastq.SE_path)
-// final_assembly | view
 
+} 
+
+else {
+
+//log.info "Nanopore"
+//log.info params.reads
+// Dla spojnosci z illumina niech kanal inital_fastq tez niech bedzie tuplem z pierwszym elementem jako identyfikatorem
+Channel
+  .fromPath(params.reads)
+  .map {it -> tuple(it.getName().split("\\.")[0], it)}
+  .set {initial_fastq}
+
+// Aanliza zanieczyszczen
+run_kraken2_nanopore(initial_fastq)
+
+// Czyszczenie fastq
+processed_fastq = clean_fastq_SE(initial_fastq)
+
+// scaffold flye + 3 rundy wygladzania tym anrzedziem
+initial_scaffold = run_flye(processed_fastq)
+
+// jedna runda pilona poki co
+final_assembly = pilon_first_nanopore(initial_scaffold, processed_fastq)
+
+}
 
 // Post-analizy
+// Sprawdzono dzialaja zarowno dla illuminy jak i nnaopore wiec sa poza if-em
 extract_final_stats(final_assembly)
 run_7MLST(final_assembly)
 run_Seqsero(final_assembly)
@@ -722,24 +835,6 @@ run_cgMLST(final_assembly)
 prokka_out = run_prokka(final_assembly)
 run_VFDB(prokka_out)
 run_spifinder(final_assembly)
-} 
 
-else {
-
-log.info "Nanopore"
-log.info params.reads
-
-
-// Dla spojnosci z illumina niech kanal inital_fastq tez niech bedzie tuplem z pierwszym elementem jako identyfikatorem
-Channel
-  .fromPath(params.reads)
-  .map {it -> tuple(it.getName().split("\\.")[0], it)}
-  .set {initial_fastq}
-
-// initial_fastq | view
-processed_fastq = clean_fastq_SE(initial_fastq)
-initial_scaffold = run_flye(processed_fastq)
-pilon_first_nanopore(initial_scaffold, processed_fastq)
-}
 } 
 
