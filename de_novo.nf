@@ -360,7 +360,7 @@ process run_cgMLST {
   // Aha run_blastn_ver6.sh wykorzystuje pod spodem xargs zeby rownolegle puszczac max ${task.cpus} 1-procesowych blastow
   script:
   """
-  /data/run_blastn_ver6.sh $fasta ${task.cpus}
+  /data/run_blastn_ver7.sh $fasta ${task.cpus}
   cp log.log cgMLST.txt
   """
 }
@@ -455,7 +455,7 @@ process run_kraken2_illumina {
   container  = 'salmonella_illumina:2.0'
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
-  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "summary_kraken.txt"
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "summary_kraken.txt"
   containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
   maxForks 5
 
@@ -463,7 +463,7 @@ process run_kraken2_illumina {
   tuple val(x), path(reads)
 
   output:
-  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt')
+  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('summary_kraken.txt')
 
   script:
   """
@@ -574,7 +574,7 @@ process run_pilon_nanopore {
   container  = 'salmonella_illumina:2.0'
   // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
   tag "Pilon for sample $x"
-  publishDir "pilon_wyniki/${x}", mode: 'copy', pattern: 'latest_pilon.*'
+  publishDir "pipeline_wyniki/pilon/${x}", mode: 'copy', pattern: 'latest_pilon.*'
   input:
   tuple val(x), path(bam1), path(fasta)
   output:
@@ -595,6 +595,50 @@ process run_pilon_nanopore {
   """
 }
 
+process run_medaka {
+  // wygladzanie genomu medaka, nanopolish nie dziala bo nie mamy pliko fast5
+
+  // UWAGA KONTENER Z MEDAKA !!!
+  container  = 'infl_nanopore_eqa:2.18'
+  // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
+  tag "Pilon for sample $x"
+  publishDir "pipeline_wyniki/pilon/${x}", mode: 'copy', pattern: 'latest_pilon.*'
+  input:
+  tuple val(x), path(bam1), path(fasta)
+  output:
+  // tuple val(x), path('postmedaka.fasta'), path('medaka_annotated_filtered.vcf.gz'), emit: ALL
+  tuple val(x), path('postmedaka.fasta'), emit: ONLY_GENOME
+  script:
+  """
+  # indeksacja bam-ow
+  samtools index $bam1
+ 
+  MODEL="r941_min_hac_g507"  
+  
+  medaka consensus --model \${MODEL} \
+                     --threads ${params.cpus} \
+                     $bam1 \
+                     forvariants.hdf
+
+  
+  medaka variant $fasta forvariants.hdf medaka.vcf
+  medaka tools annotate medaka.vcf $fasta $bam1 medaka_annotated.vcf
+  bcftools sort medaka_annotated.vcf >> medaka_annotated_sorted.vcf
+  bgzip medaka_annotated_sorted.vcf
+  tabix medaka_annotated_sorted.vcf.gz
+  
+  qual=13
+  min_cov=20
+  
+  bcftools filter -O z -o medaka_annotated_filtered.vcf.gz -i "GQ > \${qual} && DP >= \${min_cov}" medaka_annotated_sorted.vcf.gz
+  tabix medaka_annotated_filtered.vcf.gz
+
+
+  cat $fasta | bcftools consensus medaka_annotated_filtered.vcf.gz >> postmedaka.fasta
+  
+  """
+}
+
 process run_kraken2_nanopore {
   // kopia processu do illuminy, ale z uwzglednieniem ze jest tylko jeden plik z odczytami
   tag "kraken2:${x}"
@@ -609,7 +653,7 @@ process run_kraken2_nanopore {
   tuple val(x), path(reads)
 
   output:
-  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt')
+  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('summary_kraken.txt')
 
   script:
   """
@@ -634,6 +678,7 @@ process run_kraken2_nanopore {
 
 workflow pilon_first_nanopore {
 // pilona puscimy tylko raz bo zakladam ze flye po cos te rundy filtrowania robi 
+// zamieniono pilona na medaka
 take:
 initial_scaffold_inner
 processed_fastq_inner_SE
@@ -644,7 +689,11 @@ for_remaping_SE_inner = initial_scaffold_inner.join(processed_fastq_inner_SE, by
 single_bams_and_genome = run_minimap2(for_remaping_SE_inner)
 
 // laczymy bam-a z mapowania z genomem
-final_assembly = run_pilon_nanopore(single_bams_and_genome)
+
+// Zamieniamy pilona na medaka
+// final_assembly = run_pilon_nanopore(single_bams_and_genome)
+
+final_assembly = run_medaka(single_bams_and_genome)
 
 // liczymy pokrycia i fitrujemy slabe contig
 
@@ -814,6 +863,7 @@ Channel
 run_kraken2_nanopore(initial_fastq)
 
 // Czyszczenie fastq
+// Teoretycznie nie jest konieczne wedlug autorow flye
 processed_fastq = clean_fastq_SE(initial_fastq)
 
 // scaffold flye + 3 rundy wygladzania tym anrzedziem
