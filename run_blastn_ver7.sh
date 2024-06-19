@@ -92,10 +92,10 @@ do
 			ALLEL_ID=`echo ${K} | cut -d " " -f1 |  sed -r  s'/.*_(.+)/\1/' `
 			ALLEL_LEN=`echo ${K} | cut -d " " -f2`
                 	QUERY_LEN=`echo ${K} | awk '{print $4 - $3 + 1}'`
-			NO_MISMATCH=`echo ${K} | awk '{print $8}'`
-			NO_GAPS=`echo ${K} | awk '{print $9}'`
+			NO_MISMATCH=`echo ${K} | awk '{print $9}'`
+			NO_GAPS=`echo ${K} | awk '{print $10}'`
 			PIDENT=`echo ${K} | awk '{print $7}'`
-			SCORE=`echo "${QUERY_LEN} - ${NO_MISMATCH} - ${NO_GAPS}" | bc -l`
+			SCORE=`echo "${QUERY_LEN} - ${NO_MISMATCH} - ${NO_GAPS}" | bc -l | awk '{print int($1)}'`
 			if [ ${SCORE} -gt ${FINAL_SCORE} ]; then
 				FINAL_ID=`echo ${ALLEL_ID}`
 				FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
