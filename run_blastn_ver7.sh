@@ -19,9 +19,9 @@ cat /cgMLST2_entero/all_3002_allele.txt | xargs -I {} --max-procs=${MAX_PROC} ba
 for K in `cat /cgMLST2_entero/all_3002_allele.txt`
 do
 
-	cp blastn_tmp_${K}.tab blastn_tmp.tab
+	mv blastn_tmp_${K}.tab blastn_tmp.tab
 	# 1 dostajemy jeden 100 % wynik pod katem seq id, sprawdzamy tylko czy pokrywa sie on w 100% z dlugoscia allelu (nie jest trimowany na koncach)
-	echo ${K}
+	#echo ${K}
 	HITY=`cat blastn_tmp.tab | awk '{if($7 == 100) print $0}' | wc -l`
 	
 	# gdyby cos nie poszlo z tymi if-ami nizej 
@@ -63,9 +63,12 @@ do
 		for ID in ${ALLELS[@]}; do
 			# wybieramy te allele ktore maja 100% pident, a mapowania obejmuja pelna dlugosc sekwencji tego allelu z cgMLST
 			# uwaga ID moze byc w wynikach blasta n-razy wybieramy to ktore mapuje sie na pident 100
-			ALLEL_ID=`cat blastn_tmp.tab |  awk -v id="${ID}" '{if($7 == 100 && $1 == id)  print $1}' |  sed -r  s'/.*_(.+)/\1/'`
-			ALLEL_LEN=`cat blastn_tmp.tab | awk -v id="${ID}" '{if($7 == 100 && $1 == id)  print $2}'`
-			QUERY_LEN=`cat blastn_tmp.tab | awk -v id="${ID}" '{if($7 == 100 && $1 == id) print $4 - $3  + 1}'`
+			
+			#uwaga 2 moze byz tak ze ten sam allel ma 2 razy pident 100, ale rozne dlugosci , wybeiramy ten z najdluzszym query len
+
+			ALLEL_ID=`cat blastn_tmp.tab |  awk -v id="${ID}" '{if($7 == 100 && $1 == id)  print $1}' |  sed -r  s'/.*_(.+)/\1/' | head -1 `
+			ALLEL_LEN=`cat blastn_tmp.tab | awk -v id="${ID}" '{if($7 == 100 && $1 == id)  print $2}' | head -1`
+			QUERY_LEN=`cat blastn_tmp.tab | awk -v id="${ID}" '{if($7 == 100 && $1 == id) print $4 - $3  + 1}' | sort -rnk1 | head -1`
 
 			# zidentyfikowany allel jest dluzszy niz allel aktualnie traktowany jako "final"
 			# oraz alignment obejmuje cala dlugosc sekwencji tego allelu
