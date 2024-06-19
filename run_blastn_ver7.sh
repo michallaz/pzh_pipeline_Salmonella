@@ -1,5 +1,20 @@
 #!/bin/bash
-# ver 0.1
+# ver 7
+# skrypt zwraca plik log.log
+# w ktrym allele podzielone sa na 4 grupy
+# normal - jest tylko jeden allel ze 100% zgodnoscia w genomie, i ten allel jest obecny w genomie w 'pelnej' dlugosci
+# short - jest tylko jeden allel ze 100% zgodnoscia w genomie, ale ten allel nie jest caly w genomie /jest uciety/
+# multi - jest wiele alleli ze 100 seq ident, wybieramy allel ktory jest pelny i najdluzszy
+# unk - nie ma allelu ze 100 seq ident, wybieramy allel ktory ma najwieksza wartosc score = dlugosc allelu w genommie - ilosc mismatch - ilosc gap
+
+# Dla kazdej z tych klas log.log zawiera troche inne dodatkowe kolumny 5+
+# normal - dlugosc allelu w cgmlst i w genomie (de facto musza to byc te same liczby)
+# multi - lista wszystkich alleli ze 100% seq id
+# short dlugosc allelu w cgmlst i w genomie (de facto musza to byc te same liczby, wtedy widac o ile za krtki jest allel w genomie)
+# unk -  dlugosc allelu w cgmlst i score 
+
+
+
 
 GENOM=$1
 MAX_PROC=$2
@@ -90,14 +105,14 @@ do
                 FINAL_QUERY_LEN=`echo -1`
 		FINAL_PIDENT="-1"	
 		FINAL_SCORE="-1"
-		cat blastn_tmp.tab | while read K; do
+		while read LINE; do
 		
-			ALLEL_ID=`echo ${K} | cut -d " " -f1 |  sed -r  s'/.*_(.+)/\1/' `
-			ALLEL_LEN=`echo ${K} | cut -d " " -f2`
-                	QUERY_LEN=`echo ${K} | awk '{print $4 - $3 + 1}'`
-			NO_MISMATCH=`echo ${K} | awk '{print $9}'`
-			NO_GAPS=`echo ${K} | awk '{print $10}'`
-			PIDENT=`echo ${K} | awk '{print $7}'`
+			ALLEL_ID=`echo ${LINE} | cut -d " " -f1 |  sed -r  s'/.*_(.+)/\1/' `
+			ALLEL_LEN=`echo ${LINE} | cut -d " " -f2`
+                	QUERY_LEN=`echo ${LINE} | awk '{print $4 - $3 + 1}'`
+			NO_MISMATCH=`echo ${LINE} | awk '{print $9}'`
+			NO_GAPS=`echo ${LINE} | awk '{print $10}'`
+			PIDENT=`echo ${LINE} | awk '{print $7}'`
 			SCORE=`echo "${QUERY_LEN} - ${NO_MISMATCH} - ${NO_GAPS}" | bc -l | awk '{print int($1)}'`
 			if [ ${SCORE} -gt ${FINAL_SCORE} ]; then
 				FINAL_ID=`echo ${ALLEL_ID}`
@@ -109,7 +124,7 @@ do
 			fi
 
 
-		done
+		done < blastn_tmp.tab 
 		
 		echo -e "${K}\t${FINAL_ID}\t${FINAL_PIDENT}\tunk\t${FINAL_TRUE_LEN}\t${FINAL_QUERY_LEN}\t${FINAL_SCORE}" >> log.log
 	fi

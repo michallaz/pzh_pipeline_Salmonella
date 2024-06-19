@@ -258,6 +258,44 @@ process run_7MLST {
   """
 }
 
+
+process parse_7MLST {
+  // Funkcja do parsowania wynikow run_7MLST
+  // Zwraca plik w ktorym mamy 9 kolumn
+  // Pierwsza to Sequnce type zgodnie z plikiem z profilem
+  // Kolejen 7 kolumn to wersje alleli dla 7 genow
+  // Kolumna 9 to odleglosc znalezionych wersji alleli do wskazanego ST, jesli mamy pelna zgodnosc to wypiujemy 0 i jest jedno-wierszowy wpis
+  // Jesli nie ma profilu z pelna zgodnoasci to wpisujemy wszystkie ST ktore maja wskazana odleglosc / pewnie bedzie to max odleglosc 1, czyli roznica w jednym z alleli /
+  // proces nie jest czescie run_7MLST bo korzystam z moich pythonowych skryptow
+  
+container  = 'salmonella_illumina:2.0'
+  tag "Pasring MLST for sample $x"
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'parsed_7MLST.txt'
+
+  input:
+  tuple val(x), path('MLSTout.txt')
+  output:
+  tuple val(x), path('parsed_7MLST.txt')
+  script:
+"""
+#!/usr/bin/python
+import  sys
+sys.path.append('/data')
+from all_functions_salmonella import *
+
+known_profiles, klucze = create_profile('/Achtman7GeneMLST_entero/MLST_profiles.txt')
+identified_profile = parse_MLST_fasta('MLSTout.txt')
+matching_profile = getST(identified_profile, known_profiles, 'MLST_profiles.txt', klucze)
+  
+formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
+
+with open('parsed_7MLST.txt', 'w') as f:
+	f.write(f'{matching_profile}\\t{formatted_string}\\t0\\n')
+  
+
+"""
+}
+
 process run_Seqsero {
   container  = 'salmonella_illumina:2.0'
   tag "Predicting OH for sample $x with Seqsero"
@@ -877,7 +915,8 @@ final_assembly = pilon_first_nanopore(initial_scaffold, processed_fastq)
 // Post-analizy
 // Sprawdzono dzialaja zarowno dla illuminy jak i nnaopore wiec sa poza if-em
 extract_final_stats(final_assembly)
-run_7MLST(final_assembly)
+MLST_out = run_7MLST(final_assembly)
+parse_7MLST(MLST_out)
 run_Seqsero(final_assembly)
 run_sistr(final_assembly)
 run_pointfinder(final_assembly)

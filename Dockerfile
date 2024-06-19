@@ -225,7 +225,7 @@ RUN make install
 RUN echo 'export PATH="/opt/docker/cgmlstfinder:$PATH"' >> ~/.bashrc
 
 WORKDIR /data
-COPY all_functions_salmonella.py run_blastn_ver6.sh master_script_kontener.sh prep_hierCC.py /data/
+COPY all_functions_salmonella.py run_blastn_ver6.sh  run_blastn_ver7.sh master_script_kontener.sh prep_hierCC.py /data/
 #ENTRYPOINT [ "/usr/bin/tini", "--" ]
 RUN pip install pandas==1.0.5  xlrd
 # to wyzej powinno rozwalic resfindera ( resfinder 4.2.5 has requirement pandas>=1.4.2 ), ale dziala tak i tak za to sistr bez wersji 1.4.2 nie pojdzie
