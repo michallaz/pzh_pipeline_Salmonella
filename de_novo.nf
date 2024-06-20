@@ -11,6 +11,12 @@ params.machine = 'Illumina'
 
 params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/" // na sztywno bo nie chce mi sie tego ustawiac za kazdym razem
 params.quality_initial = 5 // Parametr stosowany aktualnie tylko przez krakena
+params.Achtman7GeneMLST_db_absolute_path_on_host = "/home/michall/git/pzh_pipeline_Salmonella/Achtman7GeneMLST_entero" //ponownie na sztywno do poprawy docelowo 
+
+// Kontenery uzywane w tym skrypcie 
+// salmonella_illumina:2.0 - bazowy kontener z programami o kodem
+// staphb/prokka:latest - kontener z prokka, w notatkach mam ze budowanie programu od 0 jest meczace bo to kod sprzed ponad 4 lat 
+// infl_nanopore_eqa:2.18 - tu jest medaka
 
 process check_etoki {
   // Testowa funkcja
@@ -246,7 +252,7 @@ process extract_final_stats {
 process run_7MLST {
   // wykorzystujemy bezposrednio Etoki, 7-genomy MLST w tym nie da sie pomylic
   container  = 'salmonella_illumina:2.0'
-  containerOptions '--volume /home/michall/git/pzh_pipeline_Salmonella/Achtman7GeneMLST_entero:/Achtman7GeneMLST_entero'
+  containerOptions "--volume ${params.Achtman7GeneMLST_db_absolute_path_on_host}:/Achtman7GeneMLST_entero"
   tag "Predicting MLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
@@ -270,7 +276,7 @@ process parse_7MLST {
   // proces nie jest czescie run_7MLST bo korzystam z moich pythonowych skryptow
   
   container  = 'salmonella_illumina:2.0'
-  containerOptions '--volume /home/michall/git/pzh_pipeline_Salmonella/Achtman7GeneMLST_entero:/Achtman7GeneMLST_entero'
+  containerOptions "--volume ${params.Achtman7GeneMLST_db_absolute_path_on_host}:/Achtman7GeneMLST_entero"
   tag "Pasring MLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'parsed_7MLST.txt'
 
