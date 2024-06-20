@@ -39,38 +39,11 @@ do
 	#echo ${K}
 	HITY=`cat blastn_tmp.tab | awk '{if($7 == 100) print $0}' | wc -l`
 	
-	# gdyby cos nie poszlo z tymi if-ami nizej 
-	# to sa defaultowe wartosci dal zmiennych 
-	ALLEL_ID="-1"
-        ALLEL_TRUE_LEN="-1"
-	
-	if [ ${HITY} -eq 1 ]; then
-		# Mamy jeden hit mapujacy sie w 100% na allel z cgMLST
-		# ale sprawdzamy jeszcze czy mapowanie obejmuje cala dlugosc allelu z cgMLST, czy blast ucial alignment gdzies po drodze
-		# id allelu z cgMLST
-		ALLEL_ID=`cat blastn_tmp.tab | awk '{if($7 == 100) print $1}' |  sed -r  s'/.*_(.+)/\1/'`
-		# dlugosc tego allelu
-		ALLEL_LEN=`cat blastn_tmp.tab | awk '{if($7 == 100) print $2}'`
-		
-		# dlugosc mapowania query
-		QUERY_LEN=`cat blastn_tmp.tab | awk '{if($7 == 100) print $4 - $3 + 1}'`
-
-
-		# Zastanowic sie co jesli mam za krotka sekwencje w stosunku do allelu z cgMLST
-		# czy nalezy braz odczyty z nie 100% seq id ale ktore sa krotsze i "lepiej" mapuja sie na alle z cgmlst 
-		if [ ${QUERY_LEN} -eq ${ALLEL_LEN} ]; then
-			echo -e "${K}\t${ALLEL_ID}\t100\tnormal\t${ALLEL_LEN}\t${QUERY_LEN}" >> log.log
-		
-		elif [ ${ALLEL_LEN} -gt ${QUERY_LEN} ];then
-			echo -e "${K}\t${ALLEL_ID}\t100\tshort\t${ALLEL_LEN}\t${QUERY_LEN}" >> log.log
-		fi
-
-
-	elif [ ${HITY} -gt 1 ]; then
-		# ALLEL_ID=(`cat blastn_tmp.tab  | awk '{if($7 == 100) print $1}' | sed -r  s'/.*_(.+)/\1/' |sort -nu`)
+	# Sa hity ze 100 seq id 
+	if [ ${HITY} -gt 0 ]; then
 		ALLELS=(`cat blastn_tmp.tab  | awk '{if($7 == 100) print $1}'`)
 		
-		# Te zienne podmieniam jesli natrafiam na dluzszy allel
+		# Te zienne podmieniam jesli natrafiam na dobry allel
 		FINAL_ID=`echo -1`
 		FINAL_TRUE_LEN=`echo -1`
 		FINAL_QUERY_LEN=`echo -1`
@@ -86,11 +59,11 @@ do
 			QUERY_LEN=`cat blastn_tmp.tab | awk -v id="${ID}" '{if($7 == 100 && $1 == id) print $4 - $3  + 1}' | sort -rnk1 | head -1`
 
 			# znalazlem pelny hit i final id -1
-			if [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -gt ${FINAL_TRUE_LEN} ] && [ ${FINAL_ID} -eq -1 ]; then
+			if [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -ge ${FINAL_TRUE_LEN} ] && [ ${FINAL_ID} -eq -1 ]; then
 				FINAL_ID=`echo ${ALLEL_ID}`
 				FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
 				FINAL_QUERY_LEN=`echo ${QUERY_LEN}`
-			elif [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -gt ${FINAL_TRUE_LEN} ] && [ ${ALLEL_ID} -lt ${FINAL_ID} ];then
+			elif [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -ge ${FINAL_TRUE_LEN} ] && [ ${ALLEL_ID} -lt ${FINAL_ID} ];then
 				# rowniez znalazlem pelny hit i ma id mniejsze niz ustawiony wczesniej FINAL id
 				FINAL_ID=`echo ${ALLEL_ID}`
                                 FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
@@ -104,6 +77,7 @@ do
 		# Nie ma allelu o 100% pident z allelami w cgMLST
 		# Iterujemy po calym pliku i szukamy takiego allelu o najnizszej sumie dlugosc mapowania - (mismatch + gaps)
 		# Defaultowe wartosci gdyby analizowany plik byl pusty
+		# Na koniec zwrocimy i tak -1, ale zostawiam sobie do testow dodatkowe informacje
 		FINAL_ID=`echo -1`
                 FINAL_TRUE_LEN=`echo -1`
                 FINAL_QUERY_LEN=`echo -1`
@@ -130,7 +104,10 @@ do
 
 		done < blastn_tmp.tab 
 		
-		echo -e "${K}\t${FINAL_ID}\t${FINAL_PIDENT}\tunk\t${FINAL_TRUE_LEN}\t${FINAL_QUERY_LEN}\t${FINAL_SCORE}" >> log.log
+		# echo -e "${K}\t${FINAL_ID}\t${FINAL_PIDENT}\tunk\t${FINAL_TRUE_LEN}\t${FINAL_QUERY_LEN}\t${FINAL_SCORE}" >> log.log
+		# docelowo entero i tak daje tu brak allelu wiec aby byc spojnym damy -1
+		# mozna dac kod jakis inny ...
+		echo -e "${K}\t-1\t${FINAL_PIDENT}\tunk\t${FINAL_TRUE_LEN}\t${FINAL_QUERY_LEN}\t${FINAL_SCORE}" >> log.log
 	fi
 
 	rm blastn_tmp.tab
