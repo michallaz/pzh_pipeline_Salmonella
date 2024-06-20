@@ -85,12 +85,16 @@ do
 			ALLEL_LEN=`cat blastn_tmp.tab | awk -v id="${ID}" '{if($7 == 100 && $1 == id)  print $2}' | head -1`
 			QUERY_LEN=`cat blastn_tmp.tab | awk -v id="${ID}" '{if($7 == 100 && $1 == id) print $4 - $3  + 1}' | sort -rnk1 | head -1`
 
-			# zidentyfikowany allel jest dluzszy niz allel aktualnie traktowany jako "final"
-			# oraz alignment obejmuje cala dlugosc sekwencji tego allelu
-			if [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] || [ ${QUERY_LEN} -gt ${FINAL_TRUE_LEN} ]; then
+			# znalazlem pelny hit i final id -1
+			if [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -gt ${FINAL_TRUE_LEN} ] && [ ${FINAL_ID} -eq -1 ]; then
 				FINAL_ID=`echo ${ALLEL_ID}`
 				FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
 				FINAL_QUERY_LEN=`echo ${QUERY_LEN}`
+			elif [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -gt ${FINAL_TRUE_LEN} ] && [ ${ALLEL_ID} -lt ${FINAL_ID} ];then
+				# rowniez znalazlem pelny hit i ma id mniejsze niz ustawiony wczesniej FINAL id
+				FINAL_ID=`echo ${ALLEL_ID}`
+                                FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
+                                FINAL_QUERY_LEN=`echo ${QUERY_LEN}`
 
 			fi
 		done
