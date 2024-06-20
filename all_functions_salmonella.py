@@ -28,10 +28,10 @@ def create_profile(profile_file):
                         slownik_profili[elementy[0]][lista_kluczy[indeks]] = wartosc
     return slownik_profili, lista_kluczy
 
-def getST(MLSTout, profile_dict, profile_file, lista_kluczy):
+def getST(MLSTout, profile_dict, lista_kluczy):
     """
     Funkcja do porownywania dwoch slownikow. Oba slowniki musza miec identyczne klucze (w tym wypadku odpowiadajace
-    loci z danego MLST). MLSTout to zwykly slownik,n atomiast profile_dict to slownik slownikow wynik funkcji
+    loci z danego MLST). MLSTout to zwykly slownik,na tomiast profile_dict to slownik slownikow wynik funkcji
     create_profile. Jeśli nie znajdziemy ST dla slownika MLSToit , to 1. tworzymy nowy ST dla niego (int, +1 w stosunku
     do największego ST obecnego w profile_dict); 2. updatujemy plik profile_file o nowy ST.
     :param MLSTout: slownik
@@ -40,63 +40,58 @@ def getST(MLSTout, profile_dict, profile_file, lista_kluczy):
     :param lista_kluczy: list, lsta posortowanych alleli w danym schemacie
     :return: string, sequence type
     """
-    # zgodnie z praktyka enterobase jesli nie znajdziemy dokladnego ST to tworzymy nowy ST i updatujemy plik profile
-    # ST = 0
-    #
-    #
-    # # tutaj trzymamy slownik dla probki, slownik jest jednopoziomowy tj klcuzami sa nazwa cechy, wartosci
-    # # to wariant, inicjujemy ten slownik wartosciami pustymi tj. 0 i te wartosci nadpisujemy tym co jest pliku MLSTout
-    # # ktory nie musi zawierac wszystkich cech
-    # slownik_tmp = {}
-    #
-    #
-    # # ten slownik trzyma info jakie jest podobienstwo miedzy danym ST z bazy a zidentyfikowanymi wariantmai
-    # podobienstwa_ST = {}
-    # for klucz in profile_dict['1']:
-    #     slownik_tmp[klucz] = 0
-    #
-    # for record in SeqIO.parse(MLSTout, "fasta"):
-    #     # opis z etoki jest dosc wystandaryzowany wiec zakladam ze pole description[0] zawiera nazwe wariantu
-    #     # pole 2 zawiera id = wartosc
-    #     # pole 6 zwiera identycznosc sekwencyjna miedzy referencja a tym co jest obserwowane w probce
-    #     if record.description.split(' ')[0] in slownik_tmp.keys() and str(record.seq) != 'DUPLICATED':
-    #         # profilaktycznie upewanimay sie ze pole 0 zawiera znany klucz
-    #         slownik_tmp[record.description.split(' ')[0]] = record.description.split(' ')[2].split('=')[1]
 
-    # teraz parsujemy po definicji i szumay wlasciwego sequence type
-    ST = 0
+
+    ST = '0'
+    slownik_roznic = {} #slownik ktory jako klucze ma nazwe profilu, jako wartosc ilosc roznic do "naszej" probki
+    lista_probki = [MLSTout[x] for x in lista_kluczy]
     for ST_dict in profile_dict:
-        #idziemy po ST w profile_dict, profilaktycznie upewniamy sie ze wartosci w slownikach sa tak samo porzadkowane
-        if([profile_dict[ST_dict][x] for x in lista_kluczy] == [MLSTout[x] for x in lista_kluczy]):
-            ST = ST_dict
-            break
-    # nie znalezlismy ST ktory idealnie pasuje do definicji z enterobase jaki jest ST najblizszy ?
-    # to bedzie straszne
-    slownik_tmp_identity = {}
-    if ST == 0:
-
-        # nowa kombinacja alleli
-        # sprawdzamy najblizszy ST dla ciekawosci
-        identity = 0
-        for klucz in  profile_dict[ST_dict]:
-            if profile_dict[ST_dict][klucz] == MLSTout[klucz]:
-                identity +=1
-        slownik_tmp_identity[ST_dict] = identity
-
-        # Na koniec nadajemy nowy St i dopisujemy poprawna kombinacje alleli do pliku profile
-        ST = max(map(int, profile_dict.keys())) + 1
-        with open(profile_file, 'a') as f:
-            msg = "\t".join([str(MLSTout[x]) for x in lista_kluczy])
-            f.write(f'{ST}\t{msg}\n')
-    #tworzymy plik wsadowy do hiercc
-
-    with open('to_hiercc.txt', 'w') as f:
-        msg = [str(ST)] + [str(MLSTout[x]) for x in lista_kluczy]
-        lista_kluczy = ['ST'] + lista_kluczy
-        f.write('{naglowek}\n{body}'.format(naglowek = "\t".join(lista_kluczy), body = "\t".join(msg)))
+        slownik_roznic[ST_dict] = 0
+        lista_ST = [profile_dict[ST_dict][x] for x in lista_kluczy]
+        slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if x != y)
 
 
-    return ST, slownik_tmp_identity
+    if 0 in slownik_roznic.values():
+        ST = [x for x, y in slownik_roznic.items() if y == 0][0]
+        return ST
+    elif 1 in slownik_roznic.values():
+        ST = [x for x, y in slownik_roznic.items() if y == 0]
+        # ST is a list, we nned to write all possible
+        return ST
+    else:
+        return 0
+        # We have smt completly new for 7MLST we better think what to do here ...
+
+    # Na razie nie ma potrzeby tego uzywac
+    # dodac oddzielna funkcje jesli znaleziono nowy schemat aby updatowac plik ze schematami ?
+    # ale wtedy ten plik musi byc na ZEWNATRZ kontenera ...
+
+    # if ST == 0:
+    #
+    #     # nowa kombinacja alleli
+    #     # sprawdzamy najblizszy ST dla ciekawosci
+    #     identity = 0
+    #     for klucz in  profile_dict[ST_dict]:
+    #         if profile_dict[ST_dict][klucz] == MLSTout[klucz]:
+    #             identity +=1
+    #     slownik_tmp_identity[ST_dict] = identity
+    #
+    #     # Na koniec nadajemy nowy St i dopisujemy poprawna kombinacje alleli do pliku profile
+    #     ST = max(map(int, profile_dict.keys())) + 1
+    #     with open(profile_file, 'a') as f:
+    #         msg = "\t".join([str(MLSTout[x]) for x in lista_kluczy])
+    #         f.write(f'{ST}\t{msg}\n')
+    # #tworzymy plik wsadowy do hiercc
+    #
+    # with open('to_hiercc.txt', 'w') as f:
+    #     msg = [str(ST)] + [str(MLSTout[x]) for x in lista_kluczy]
+    #     lista_kluczy = ['ST'] + lista_kluczy
+    #     f.write('{naglowek}\n{body}'.format(naglowek = "\t".join(lista_kluczy), body = "\t".join(msg)))
+    #
+    #
+    # return ST, slownik_tmp_identity
+def update_MLSTprofile_file():
+    pass
 
 def parse_MLST_tsv(file_path, long = True, sep = "\t"):
     """

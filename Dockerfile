@@ -69,11 +69,15 @@ RUN echo 'export PATH="/opt/docker/EToKi/externals/ncbi-blast-2.8.1+/bin:$PATH"'
 RUN echo 'export PATH="/opt/docker/EToKi/externals/:$PATH"' >> ~/.bashrc
 
 # Sciaganie MLST 7 genowy ze strony enterobase - https://enterobase.warwick.ac.uk/schemes/Salmonella.Achtman7GeneMLST/
-RUN mkdir -p /Achtman7GeneMLST_entero
+#RUN mkdir -p /Achtman7GeneMLST_entero
 # WORKDIR /Achtman7GeneMLST_entero
 
 # ENTERO zmineilo aPI na razie korzystam z wersji jako mam lokalnie i ja kopiuje
-COPY Achtman7GeneMLST_entero /Achtman7GeneMLST_entero
+
+#COPY Achtman7GeneMLST_entero /Achtman7GeneMLST_entero
+
+# uzanjemy ze schemat jest NA ZEWNATRZ, latwiej bedzie updatowac plik z profilami
+
 #RUN curl -s  https://enterobase.warwick.ac.uk/schemes/Salmonella.Achtman7GeneMLST/ >> log
 #RUN cat log  | grep fasta | grep -v MLST | sed s'/<\|>/ /'g | awk '{print $3}' >> to_download.txt
 #RUN for K in `cat to_download.txt`; do wget https://enterobase.warwick.ac.uk/schemes/Salmonella.Achtman7GeneMLST/${K}; gunzip ${K}; done
@@ -88,8 +92,10 @@ COPY Achtman7GeneMLST_entero /Achtman7GeneMLST_entero
 
 #Sciaganie cgMLST ze strony enterobase - https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/
 
-RUN mkdir -p /cgMLST2_entero
-WORKDIR /cgMLST2_entero
+### cgMLST tez bedzie montowane z zewnatrz ### 
+
+# RUN mkdir -p /cgMLST2_entero
+# WORKDIR /cgMLST2_entero
 
 #RUN wget https://enterobase.warwick.ac.uk/schemes/Salmonella.cgMLSTv2/cgMLST_salmonella.tar # nie korzystamy archiwum nie bylo
 # updatowane od 2017 roku
@@ -225,9 +231,9 @@ RUN make install
 RUN echo 'export PATH="/opt/docker/cgmlstfinder:$PATH"' >> ~/.bashrc
 
 WORKDIR /data
-COPY all_functions_salmonella.py run_blastn_ver6.sh  run_blastn_ver7.sh master_script_kontener.sh prep_hierCC.py /data/
+# COPY all_functions_salmonella.py run_blastn_ver6.sh  run_blastn_ver7.sh master_script_kontener.sh prep_hierCC.py /data/
 #ENTRYPOINT [ "/usr/bin/tini", "--" ]
-RUN pip install pandas==1.0.5  xlrd
+RUN pip install pandas==1.0.5 xlrd
 # to wyzej powinno rozwalic resfindera ( resfinder 4.2.5 has requirement pandas>=1.4.2 ), ale dziala tak i tak za to sistr bez wersji 1.4.2 nie pojdzie
 # xlrd potrebne jest to czytania xls a baza VFDB ma plik z opisami w arkuszu excelowym
 
@@ -277,6 +283,7 @@ RUN make -j 20
 ## Nanopolish ma specjalnie bez opcji -j bo potrafi sie nie budowac obraz przy wielu procesorach
 ## RUN make 
 
+COPY all_functions_salmonella.py  run_blastn_ver7.sh master_script_kontener.sh prep_hierCC.py /data/
 WORKDIR /data
 CMD ["/bin/bash"]
 #ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]

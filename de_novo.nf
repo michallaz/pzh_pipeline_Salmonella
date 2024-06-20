@@ -246,6 +246,7 @@ process extract_final_stats {
 process run_7MLST {
   // wykorzystujemy bezposrednio Etoki, 7-genomy MLST w tym nie da sie pomylic
   container  = 'salmonella_illumina:2.0'
+  containerOptions '--volume /home/michall/git/pzh_pipeline_Salmonella/Achtman7GeneMLST_entero:/Achtman7GeneMLST_entero'
   tag "Predicting MLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
@@ -268,7 +269,8 @@ process parse_7MLST {
   // Jesli nie ma profilu z pelna zgodnoasci to wpisujemy wszystkie ST ktore maja wskazana odleglosc / pewnie bedzie to max odleglosc 1, czyli roznica w jednym z alleli /
   // proces nie jest czescie run_7MLST bo korzystam z moich pythonowych skryptow
   
-container  = 'salmonella_illumina:2.0'
+  container  = 'salmonella_illumina:2.0'
+  containerOptions '--volume /home/michall/git/pzh_pipeline_Salmonella/Achtman7GeneMLST_entero:/Achtman7GeneMLST_entero'
   tag "Pasring MLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'parsed_7MLST.txt'
 
@@ -285,13 +287,34 @@ from all_functions_salmonella import *
 
 known_profiles, klucze = create_profile('/Achtman7GeneMLST_entero/MLST_profiles.txt')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
-matching_profile = getST(identified_profile, known_profiles, 'MLST_profiles.txt', klucze)
-  
-formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
+matching_profile = getST(MLSTout = identified_profile, \
+                         profile_dict = known_profiles, \
+                         lista_kluczy = klucze)
 
-with open('parsed_7MLST.txt', 'w') as f:
-	f.write(f'{matching_profile}\\t{formatted_string}\\t0\\n')
   
+
+if isinstance(matching_profile, str) and int(matching_profile) != 0:
+	# we identified only one matching profile 
+	formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
+	with open('parsed_7MLST.txt', 'w') as f:
+		f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
+		f.write(f'{matching_profile}\\t{formatted_string}\\t0\\n')
+elif isinstance(matching_profile, list):
+	# no matching profile in the database we print all profiles with distance 1
+	formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
+	with open('parsed_7MLST.txt', 'w') as f:
+		f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
+		f.write(f'Novel\\t{formatted_string}\\t0\\n')
+		for hit in matching_profile:
+			formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**known_profiles[hit])
+			f.write(f'{hit}\\t{formatted_string}\\t1\\n')
+		
+else:
+	#No matching profiles with distance 1
+	with open('parsed_7MLST.txt', 'w') as f:
+		f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
+		f.write(f'Novel\\t{formatted_string}\\t0\\n')
+		f.write(f'No matching profiles with at most 1 allelic difference')
 
 """
 }
