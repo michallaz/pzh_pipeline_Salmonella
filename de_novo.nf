@@ -1,4 +1,4 @@
-params.cpus = 24
+params.cpus = 25
 params.min_coverage_ratio = 0.1 // Etoki odrzuca contigi ktorych srednie pokrycie jest mniejsze niz 0.2 globalnego pokrycia
 // my nie jestesmy tak ostrzy dajemy 0.1 co tlumaczymy uzyciem innego alignera
 
@@ -84,7 +84,14 @@ process spades {
   tuple val(x),  path('scaffolds_fix.fasta')
   script:
   """
-  python /opt/docker/EToKi/externals/spades.py -t ${task.cpus}  --pe-1 1 R1.fastq.gz --pe-2 1 R2.fastq.gz --pe-s 2 SE.fastq.gz -o spades_manual
+  #  for 150bp reads SPAdes uses k-mer sizes 21, 33, 55, 77
+  #  We strongly recommend not to change -k parameter unless you are clearly aware about the effect.
+  # --isolate This flag is highly recommended for high-coverage isolate and multi-cell Illumina data;
+  # --careful Tries to reduce the number of mismatches and short indels. ale nie dziala z isolate
+  #  wywolanie spades w ramach etoki to tylko definicja inputu + liczby procesorow
+  # /opt/docker/EToKi/externals/spades.py -t 8 --pe-1 1 /Salomenlla/test_etoki/id_151_novel_etoki_with_comments/prep_out_L1_R1.fastq.gz --pe-2 1 /Salomenlla/test_etoki/id_151_novel_etoki_with_comments/prep_out_L1_R2.fastq.gz --pe-s 2 /Salomenlla/test_etoki/id_151_novel_etoki_with_comments/prep_out_L1_SE.fastq.gz -o spades
+
+  python /opt/docker/EToKi/externals/spades.py --isolate -t ${task.cpus}  --pe-1 1 R1.fastq.gz --pe-2 1 R2.fastq.gz --pe-s 2 SE.fastq.gz  -o spades_manual
   cat spades_manual/scaffolds.fasta  | awk '{if(\$0 ~ />/) {split(\$0, ala, "_"); print ">NODE"ala[2]} else print \$0}' >> scaffolds_fix.fasta
   """
 
@@ -427,7 +434,7 @@ process run_cgMLST {
   // Aha run_blastn_ver6.sh wykorzystuje pod spodem xargs zeby rownolegle puszczac max ${task.cpus} 1-procesowych blastow
   script:
   """
-  /data/run_blastn_ver7.sh $fasta ${task.cpus}
+  /data/run_blastn_ver8.sh $fasta ${task.cpus}
   cp log.log cgMLST.txt
   """
 }

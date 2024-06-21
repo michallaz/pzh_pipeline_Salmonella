@@ -283,7 +283,7 @@ RUN make -j 20
 ## Nanopolish ma specjalnie bez opcji -j bo potrafi sie nie budowac obraz przy wielu procesorach
 ## RUN make 
 
-COPY all_functions_salmonella.py  run_blastn_ver7.sh master_script_kontener.sh prep_hierCC.py /data/
+COPY all_functions_salmonella.py run_blastn_ver8.sh  run_blastn_ver7.sh master_script_kontener.sh prep_hierCC.py /data/
 WORKDIR /data
 CMD ["/bin/bash"]
 #ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]

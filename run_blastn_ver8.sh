@@ -1,5 +1,9 @@
 #!/bin/bash
-# ver 7
+# ver 8
+
+# W wersji 8 dalej opracowywanej na podstawie przykladu ST8 zmieniono if-a przy multimapowani
+# Nie liczy sie dlugosc a tylko numer allelu, im nizszy tym lepszy
+
 # skrypt zwraca plik log.log
 # w ktrym allele podzielone sa na 4 grupy
 # normal - jest tylko jeden allel ze 100% zgodnoscia w genomie, i ten allel jest obecny w genomie w 'pelnej' dlugosci
@@ -63,12 +67,12 @@ do
 				FINAL_ID=`echo ${ALLEL_ID}`
 				FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
 				FINAL_QUERY_LEN=`echo ${QUERY_LEN}`
-			elif [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -gt ${FINAL_TRUE_LEN} ]; then
+			#elif [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -gt ${FINAL_TRUE_LEN} ]; then
 				# nowy allel jest dluzszy niz ten znaleziony wczesniej, to ma pierwszenstwo
-				FINAL_ID=`echo ${ALLEL_ID}`
-                                FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
-                                FINAL_QUERY_LEN=`echo ${QUERY_LEN}`
-			elif [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${QUERY_LEN} -ge ${FINAL_TRUE_LEN} ] && [ ${ALLEL_ID} -lt ${FINAL_ID} ];then
+			#	FINAL_ID=`echo ${ALLEL_ID}`
+                        #       FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
+                        #        FINAL_QUERY_LEN=`echo ${QUERY_LEN}`
+			elif [ ${QUERY_LEN} -eq  ${ALLEL_LEN} ] && [ ${ALLEL_ID} -lt ${FINAL_ID} ];then
 				# allel jest dluzszy lub tej samej dlugosci, ale numer allelu jest nizszy niz ten wczesniejszy
 				FINAL_ID=`echo ${ALLEL_ID}`
                                 FINAL_TRUE_LEN=`echo ${ALLEL_LEN}`
