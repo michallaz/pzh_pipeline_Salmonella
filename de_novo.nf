@@ -434,7 +434,7 @@ process run_cgMLST {
   // Aha run_blastn_ver6.sh wykorzystuje pod spodem xargs zeby rownolegle puszczac max ${task.cpus} 1-procesowych blastow
   script:
   """
-  /data/run_blastn_ver8.sh $fasta ${task.cpus}
+  /data/run_blastn_ver10.sh $fasta ${task.cpus}
   cp log.log cgMLST.txt
   """
 }
