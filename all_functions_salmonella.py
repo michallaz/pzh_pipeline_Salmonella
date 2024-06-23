@@ -25,7 +25,7 @@ def create_profile(profile_file):
                     # tworzymy slownik dla danego ST
                     slownik_profili[elementy[0]] = {}
                     for indeks,wartosc in enumerate(elementy[1:]):
-                        slownik_profili[elementy[0]][lista_kluczy[indeks]] = wartosc
+                        slownik_profili[elementy[0]][lista_kluczy[indeks]] = int(wartosc)
     return slownik_profili, lista_kluczy
 
 def getST(MLSTout, profile_dict, lista_kluczy):
@@ -48,8 +48,9 @@ def getST(MLSTout, profile_dict, lista_kluczy):
     for ST_dict in profile_dict:
         slownik_roznic[ST_dict] = 0
         lista_ST = [profile_dict[ST_dict][x] for x in lista_kluczy]
-        slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if x != y)
-
+        slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 or y > 0))
+        # W cgMLST czasami sa 0 lub wartosci <0 ktore chyba nie sa uwzgledniane
+        # przy wyborze ST
 
     if 0 in slownik_roznic.values():
         ST = [x for x, y in slownik_roznic.items() if y == 0][0]
@@ -59,7 +60,7 @@ def getST(MLSTout, profile_dict, lista_kluczy):
         # ST is a list, we nned to write all possible
         return ST
     else:
-        return 0
+        return slownik_roznic
         # We have smt completly new for 7MLST we better think what to do here ...
 
     # Na razie nie ma potrzeby tego uzywac
@@ -132,10 +133,10 @@ def parse_MLST_fasta(file_path):
         # opis z etoki jest dosc wystandaryzowany wiec zakladam ze pole description[0] zawiera nazwe wariantu
         # pole 2 zawiera id = wartosc
         # pole 6 zwiera identycznosc sekwencyjna miedzy referencja a tym co jest obserwowane w probce
-        slownik_alleli[record.description.split(' ')[0]] = record.description.split(' ')[2].split('=')[1]
+        slownik_alleli[record.description.split(' ')[0]] = int(record.description.split(' ')[2].split('=')[1])
     return slownik_alleli
 
-def parse_MLST_blastn(plik):
+def _parse_MLST_blastn(plik):
     """
     Funkcja do parsowania outputu mojego skryptu blastowego w ktorym sa 4 kolumny, pierwsza to nazwa allelu, druga numer
     allelu, 3 to identycznosc sekwenyjna miedzy tym allelem a sekwencja w genomie, 4 to info czy bylo wiele mapowan
@@ -154,6 +155,27 @@ def parse_MLST_blastn(plik):
                     slownik_profili[line[0]] = int(line[1])
                 else:
                     slownik_profili[line[0]] = -1
+            except ValueError:
+                slownik_profili[line[0]] = -1
+    return(slownik_profili)
+
+
+def parse_MLST_blastn(plik):
+    """
+    Funkcja do parsowania outputu mojego skryptu blastowego sa w nim 2 kolumny klucz i numer allelu (moze byc -1 jesli
+    danego allelu nie ma)
+    :param plik: str, sciezka do pliku z wynikami funkcji run_blastn_verX.sh
+    :return: slownik, kluczami sa nazwy alleli w postaci stringow, warosciami numery alleli w postaci int
+    """
+    slownik_profili = {}
+    if not os.path.isfile(plik):
+        raise IOError('Brak sciezki do pliku z profilem')
+    with open(plik, 'r') as f:
+        for line in f:
+            line = line.rsplit()
+            try:
+                int(line[1])
+                slownik_profili[line[0]] = int(line[1])
             except ValueError:
                 slownik_profili[line[0]] = -1
     return(slownik_profili)

@@ -435,9 +435,60 @@ process run_cgMLST {
   script:
   """
   /data/run_blastn_ver10.sh $fasta ${task.cpus}
-  cp log.log cgMLST.txt
+  cat log.log | cut -f1,2 > cgMLST.txt
   """
 }
+
+process parse_cgMLST {
+  // Funkcja do parsowania wynikow run_cgMLST
+  // Zwraca plik parsed_cgMLST.txt ktory albo zawiera pojedyncza cyfre z infromrmacja o pasujacym profilu
+  // "Multiple_distance1" jesli jest wiele ST z odlegloscia 1
+  // lub wiele linijek w trypi ST:odleglosc jesli nie bylo ST z odlegloscia 0 lub 1
+  // UWAGA wczytanie wszystkich 400k profili wymaga ponad 50 Gb Ram-u poki co
+  // wiec lepiej nie puszczac tego dla wiecej niz 4 probek na raz
+
+  container  = 'salmonella_illumina:2.0'
+  containerOptions '--volume /mnt/sda1/michall/db/cgMLST_30042024:/cgMLST2_entero'
+  tag "Parsing cgMLST for sample $x"
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'parsed_cgMLST.txt'
+  maxForks 4
+  input:
+  tuple val(x), path('cgMLST.txt')
+  output:
+  tuple val(x), path('parsed_cgMLST.txt')
+  script:
+"""
+#!/usr/bin/python
+import  sys
+sys.path.append('/data')
+from all_functions_salmonella import *
+
+known_profiles, klucze = create_profile('/cgMLST2_entero/profiles.list')
+identified_profile = parse_MLST_blastn('cgMLST.txt')
+matching_profile = getST(MLSTout = identified_profile, \
+			profile_dict = known_profiles, \
+			lista_kluczy = klucze)
+
+
+
+if isinstance(matching_profile, str) and int(matching_profile) != 0:
+	# we identified only one matching profile
+	with open('parsed_cgMLST.txt', 'w') as f:
+		f.write(f'{matching_profile}\\t0\\n')
+elif isinstance(matching_profile, list):
+	# no matching profile in the database we print all profiles with distance 1
+	with open('parsed_cgMLST.txt', 'w') as f:
+		f.write(f'Multiple_distance1\\t1\\n')
+
+elif isinstance(matching_profile, dict):
+	#No matching profiles with distance 1
+	with open('parsed_cgMLST.txt', 'w') as f:
+		for klucz,wartosc in matching_profile.items():
+			f.write(f'{klucz}:{wartosc}\\n')
+
+"""
+}
+
 
 process run_prokka {
   // Propkka to soft do przewidywania genow w genomie (zwraca tez sekwencje bialek i annotace)
@@ -956,7 +1007,8 @@ parse_7MLST(MLST_out)
 run_Seqsero(final_assembly)
 run_sistr(final_assembly)
 run_pointfinder(final_assembly)
-run_cgMLST(final_assembly)
+cgMLST_out = run_cgMLST(final_assembly)
+parse_cgMLST(cgMLST_out)
 prokka_out = run_prokka(final_assembly)
 run_VFDB(prokka_out)
 run_spifinder(final_assembly)
