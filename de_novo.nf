@@ -12,6 +12,9 @@ params.machine = 'Illumina'
 params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/" // na sztywno bo nie chce mi sie tego ustawiac za kazdym razem
 params.quality_initial = 5 // Parametr stosowany aktualnie tylko przez krakena
 params.Achtman7GeneMLST_db_absolute_path_on_host = "/home/michall/git/pzh_pipeline_Salmonella/Achtman7GeneMLST_entero" //ponownie na sztywno do poprawy docelowo 
+params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/cgMLST_30042024" // sciezka do alleli z cgMLST + informacja o profilacj hierCC
+params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwIjoxNzM2MjA0NDExfQ.eyJfIjoibUsyNFlZSHd4SyIsInVzZXJuYW1lIjoiTWljaGFsX0xhem5pZXdza2kiLCJpZCI6ODg4MCwiYWRtaW5pc3RyYXRvciI6bnVsbCwiZW1haWwiOiJtbGF6bmlld3NraUBwemguZ292LnBsIiwiYXBpX2FjY2Vzc19jbG9zdHJpZGl1bSI6IlRydWUiLCJhcGlfYWNjZXNzX2Vjb2xpIjoiVHJ1ZSIsImFwaV9hY2Nlc3Nfc2VudGVyaWNhIjoiVHJ1ZSJ9.VEsyVPv8sn1zG7d3uFqEjfk6XFS2qP8P5Y5mh9VPE9w" // klucz api nadawany przez ENTEROBASE po rejestracji na stronie + wystapieniu o klucz 
+
 
 // Kontenery uzywane w tym skrypcie 
 // salmonella_illumina:2.0 - bazowy kontener z programami o kodem
@@ -380,14 +383,16 @@ process run_sistr {
 process run_pointfinder {
   container  = 'salmonella_illumina:2.0'
   tag "Predicting microbial resistance for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: '*' 
+  publishDir "pipeline_wyniki/${x}/pointfinder", mode: 'copy', pattern: "resfinder_out/ResFinder_results_table.txt"
+  publishDir "pipeline_wyniki/${x}/pointfinder", mode: 'copy', pattern: "resfinder_out/pheno_table_*.txt"
+  publishDir "pipeline_wyniki/${x}/pointfinder", mode: 'copy', pattern: "resfinder_out/PointFinder_results.txt"
   // pattern mowi co kopiowac
   input:
   tuple val(x), path(fasta)
   output:
   // tak naprawde pheno_table jest istotne ale pozostale pliki tlumacza jakie geny niosace opornosci znaleziono i jakie mutacje
   // w genach wywolujace opornosc znaleziono
-  tuple val(x), path('resfinder_out/pheno_table.txt'), path('resfinder_out/ResFinder_results.txt'), path('resfinder_out/PointFinder_results.txt')
+  tuple val(x), path('resfinder_out/pheno_table*.txt'), path('resfinder_out/ResFinder_results_table.txt'), path('resfinder_out/PointFinder_results.txt')
   script:
   // resfinder rozumie 4 organizmy
   // campylobacter jejuni
@@ -405,7 +410,7 @@ process run_pointfinder {
   // pozostale opcje to sciezki do baz /instalowanych wraz z tworzeniem obrazu/ 
   """
   # resfinder-owi mozna tez podac pliki fastq (-ifq) jako input
-  python -m resfinder -o resfinder_out -s ${params.species}  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+  python -m resfinder -o resfinder_out/ -s ${params.species}  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
   #virulence
   # echo 'Analyzing virulence islands for Salmonella'
   # mkdir tmp
@@ -419,7 +424,7 @@ process run_cgMLST {
   container  = 'salmonella_illumina:2.0'
   // podmontujemy z zewnatrz cgMLST, montujemy na /cgMLST2_entero bo skrypt run_blastn_ver6.sh
   // ma tak za hard-kodowane i nie chce tego zmieniac poki co
-  containerOptions '--volume /mnt/sda1/michall/db/cgMLST_30042024:/cgMLST2_entero'
+  containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
   tag "Predicting cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
@@ -550,6 +555,8 @@ process run_VFDB {
 
 }
 
+
+
 process run_spifinder {
   container  = 'salmonella_illumina:2.0'
   tag "Predicting virulence islands for sample $x"
@@ -607,6 +614,162 @@ process run_kraken2_illumina {
   echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> summary_kraken.txt
   """
 }
+
+process run_pHierCC {
+  
+  // Funkcja odpytuje API Enterobase w celu wyciagniecia profuili z tej bazu
+  // Ponadto Funkcja odpytuje dwa pliki przygotowane przeze mnie 
+  // Jeden zawierajacy klastrowanie SINGLE linkage zbudowane na 430k profili z enterobase
+  // Drugi zawierajacy klastrowanie COMPLETE linkage zbudowane na 430k profili z enterobae
+  // Jesli ST jest nowy NIE obecny w zadnej z baz program nic nie zwraca ?
+  
+  container  = 'salmonella_illumina:2.0'
+  containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
+  tag "Predicting hierCC levels for sample $x"
+  publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
+  input:
+  tuple val(x), path('parsed_cgMLST.txt')
+  output:
+  tuple val(x), path('parsed_phiercc_enterobase.txt'), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt')
+  script:
+"""
+#!/usr/bin/python
+### kod pobrany ze strony https://enterobase.readthedocs.io/en/latest/api/api-getting-started.html ###
+
+import  sys
+from urllib.request import urlopen
+from urllib.error import HTTPError
+import urllib
+import base64
+import json
+import gzip
+
+API_TOKEN = "${params.enterobase_api_token}"
+
+def __create_request(request_str):
+    base64string = base64.b64encode('{0}: '.format(API_TOKEN).encode('utf-8'))
+    headers = {"Authorization": "Basic {0}".format(base64string.decode())}
+    request = urllib.request.Request(request_str, None, headers)
+    return request
+
+def getST(my_file):
+    # prosta funkcja zwraca wszystkie numery ST z odlegloscia 0 (patrz funkcja parse_cgMLST)
+    my_ST = []
+    with open(my_file) as f:
+        for line in f:
+            line = line.rsplit()
+            if int(line[1]) == 0:
+                my_ST.append(line[0])
+    return my_ST
+
+my_ST = getST('parsed_cgMLST.txt')
+if len(my_ST) == 0:
+    # nie znaleziono ST inicjalizuje puste pliki
+    with open('parsed_phiercc_enterobase.txt', 'w') as f:
+        f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+        f.write(f'UNK\\tUNK\\n')
+
+    with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f:
+        f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+        f.write(f'UNK\\tUNK\\n')
+ 
+    with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
+        f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+        f.write(f'UNK\\tUNK\\n')
+    
+# wyciaganie danych z enterobase	
+with open('parsed_phiercc_enterobase.txt', 'w') as f:
+    f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+    for ST in my_ST:
+        address = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/cgMLST_v2/sts?st_id={ST}&scheme=cgMLST_v2&limit=5"
+        try:
+            response = urlopen(__create_request(address))
+            data = json.load(response)
+            data['STs'][0]['info']['hierCC']
+            formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
+            f.write(f'{ST}\\t{formatted_string}\\n')
+        except:
+            f.write(f'{ST}\\tUNK\\n')
+            
+
+# wyciaganie danych z moich przeliczonych wczesniej plikow
+with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f:
+    f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+    for ST in my_ST:
+        with gzip.open('/cgMLST2_entero/profile_single_linkage.HierCC.gz') as f2:
+            for line in f2:
+                line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
+                if line[0] == ST:
+                    f.write(f'{line[0]}\\t{line[1]}\\t{line[3]}\\t{line[6]}\\t{line[11]}\\t{line[21]}\\t{line[51]}\\t{line[101]}\\t{line[201]}\\t{line[401]}\\t{line[901]}\\t{line[2001]}\\t{line[2851]}\\n')
+                    break # konczymy iterowac pl pliku
+        
+with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
+    f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+    for ST in my_ST:
+        with gzip.open('/cgMLST2_entero/profile_complete_linkage.HierCC.gz') as f2:
+            for line in f2:
+                line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
+                if line[0] == ST:
+                    f.write(f'{line[0]}\\t{line[1]}\\t{line[3]}\\t{line[6]}\\t{line[11]}\\t{line[21]}\\t{line[51]}\\t{line[101]}\\t{line[201]}\\t{line[401]}\\t{line[901]}\\t{line[2001]}\\t{line[2851]}\\n')
+                    break # konczymy iterowac pl pliku
+
+"""
+}
+
+process extract_historical_data {
+  // W przypadku znalezienia ST ktory jest  bazie enterobase
+  // Wyciagamy informacje gdzie i kiedy byly zebrane probki z tym ST 
+  container  = 'salmonella_illumina:2.0'
+  tag "Extracting historical data for sample $x"
+  publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
+  input:
+  tuple val(x), path('parsed_cgMLST.txt')
+  output:
+  tuple val(x), path('enterobase_historical_data.txt')
+  script:
+"""
+#!/usr/bin/python
+
+import  sys
+from urllib.request import urlopen
+from urllib.error import HTTPError
+import urllib
+import base64
+import json
+
+
+API_TOKEN = "${params.enterobase_api_token}"
+
+def __create_request(request_str):
+    base64string = base64.b64encode('{0}: '.format(API_TOKEN).encode('utf-8'))
+    headers = {"Authorization": "Basic {0}".format(base64string.decode())}
+    request = urllib.request.Request(request_str, None, headers)
+    return request
+
+def getST(my_file):
+    # prosta funkcja zwraca wszystkie numery ST z odlegloscia 0 (patrz funkcja parse_cgMLST)
+    my_ST = []
+    with open(my_file) as f:
+        for line in f:
+            line = line.rsplit()
+            if int(line[1]) == 0:
+                my_ST.append(line[0])
+    return my_ST
+
+my_ST = getST('parsed_cgMLST.txt')
+
+# To DO
+
+"""
+}
+
+
+//process build_model {
+  // Ogolny proces do budowania modelu
+  // Zostaje do implementacji przez Michala K.
+//}
+
+
 
 // FUNKCJE DODANE DLA ANALIZY NANOPORE //
 
@@ -797,6 +960,7 @@ process run_kraken2_nanopore {
   echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> summary_kraken.txt
   """
 }
+
 
 
 // SUB WORKFLOWS NANOPORE //
@@ -1008,7 +1172,8 @@ run_Seqsero(final_assembly)
 run_sistr(final_assembly)
 run_pointfinder(final_assembly)
 cgMLST_out = run_cgMLST(final_assembly)
-parse_cgMLST(cgMLST_out)
+parse_cgMLST_out = parse_cgMLST(cgMLST_out)
+run_pHierCC(parse_cgMLST_out)
 prokka_out = run_prokka(final_assembly)
 run_VFDB(prokka_out)
 run_spifinder(final_assembly)
