@@ -686,7 +686,7 @@ with open('parsed_phiercc_enterobase.txt', 'w') as f:
             response = urlopen(__create_request(address))
             data = json.load(response)
             data['STs'][0]['info']['hierCC']
-            formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
+            formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2600}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
             f.write(f'{ST}\\t{formatted_string}\\n')
         except:
             f.write(f'{ST}\\tUNK\\n')
@@ -700,7 +700,7 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f:
             for line in f2:
                 line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
                 if line[0] == ST:
-                    f.write(f'{line[0]}\\t{line[1]}\\t{line[3]}\\t{line[6]}\\t{line[11]}\\t{line[21]}\\t{line[51]}\\t{line[101]}\\t{line[201]}\\t{line[401]}\\t{line[901]}\\t{line[2001]}\\t{line[2851]}\\n')
+                    f.write(f'{line[0]}\\t{line[1]}\\t{line[3]}\\t{line[6]}\\t{line[11]}\\t{line[21]}\\t{line[51]}\\t{line[101]}\\t{line[201]}\\t{line[401]}\\t{line[901]}\\t{line[2001]}\\t{line[2601]}\\t{line[2851]}\\n')
                     break # konczymy iterowac pl pliku
         
 with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
@@ -710,7 +710,7 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
             for line in f2:
                 line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
                 if line[0] == ST:
-                    f.write(f'{line[0]}\\t{line[1]}\\t{line[3]}\\t{line[6]}\\t{line[11]}\\t{line[21]}\\t{line[51]}\\t{line[101]}\\t{line[201]}\\t{line[401]}\\t{line[901]}\\t{line[2001]}\\t{line[2851]}\\n')
+                    f.write(f'{line[0]}\\t{line[1]}\\t{line[3]}\\t{line[6]}\\t{line[11]}\\t{line[21]}\\t{line[51]}\\t{line[101]}\\t{line[201]}\\t{line[401]}\\t{line[901]}\\t{line[2001]}\\t{line[2601]}\\t{line[2851]}\\n')
                     break # konczymy iterowac pl pliku
 
 """
