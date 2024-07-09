@@ -21,6 +21,9 @@ params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwI
 // staphb/prokka:latest - kontener z prokka, w notatkach mam ze budowanie programu od 0 jest meczace bo to kod sprzed ponad 4 lat 
 // infl_nanopore_eqa:2.18 - tu jest medaka
 
+
+// Dodac analize fastqc 
+
 process check_etoki {
   // Testowa funkcja
   container  = 'salmonella_illumina:2.0'
@@ -685,7 +688,7 @@ with open('parsed_phiercc_enterobase.txt', 'w') as f:
         try:
             response = urlopen(__create_request(address))
             data = json.load(response)
-            data['STs'][0]['info']['hierCC']
+            #data['STs'][0]['info']['hierCC']
             formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2600}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
             f.write(f'{ST}\\t{formatted_string}\\n')
         except:
@@ -759,7 +762,19 @@ def getST(my_file):
 my_ST = getST('parsed_cgMLST.txt')
 
 # To DO
+# To pobierze wszystkie strains
+adress = 'https://enterobase.warwick.ac.uk/api/v2.0/senterica/strains?my_strains=false&sortorder=asc&return_all=true&offset=0'
+response = urlopen(__create_request(address))
+data = json.load(response)
+# iterujac po data mozemy znalezc barcode
+data['Strains'][100]['strain_barcode']
+i mozemy go uzyc aby odpytac bazw straindata
+'https://enterobase.warwick.ac.uk/api/v2.0/senterica/straindata?sortorder=asc&offset=0&barcode=SAL_CA6982AA'
 
+baza strainada zwraca nam st_id 
+data2['straindata']['SAL_CA6982AA']['sts'][3]['st_id']
+a majac st_is mozemy odpytac baze sts tak jak to robimy przy hiercc aby dostac informacje o hiercc
+problem to to za musze odpytac ta baze bardzo wiele razy w ten sposob ...
 """
 }
 
@@ -770,6 +785,28 @@ my_ST = getST('parsed_cgMLST.txt')
 //}
 
 
+process run_plasmidfinder {
+  container  = 'salmonella_illumina:2.0'
+  tag "Predicting plasmids for sample $x"
+  publishDir "pipeline_wyniki/${x}/plasmidfinder_results", mode: 'copy'
+  cpus params.cpus
+  input:
+  tuple val(x), path(fasta)
+  output:
+  tuple val(x), path('plasmidfinder_results/*')
+
+  script:
+  """
+  # -i to oczywiscie input na podstawie jego rozszerzenia program wybiera metode do analizy (kma dla fastq i blastn dla fasta)
+  # -o to katalog z wynikami, musi istniec
+  # -p to sciezka do katalog z bazami (tymi z repo plasmidfinder_db)
+  # -l to minimalny procent sekwencji jaki musi alignowac sie na genom
+  # -t to minimalne sequence identity miedzy query a subject
+  # -x printuj dodatkowe dane w output (alignmenty)
+  mkdir plasmidfinder_results # program wymaga tworzenia katalogu samodzielnie
+  /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder_results -p /opt/docker/plasmidfinder_db -l 0.6 -t 0.9 -x
+  """
+}
 
 // FUNKCJE DODANE DLA ANALIZY NANOPORE //
 
@@ -1171,6 +1208,7 @@ parse_7MLST(MLST_out)
 run_Seqsero(final_assembly)
 run_sistr(final_assembly)
 run_pointfinder(final_assembly)
+run_plasmidfinder(final_assembly)
 cgMLST_out = run_cgMLST(final_assembly)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
 run_pHierCC(parse_cgMLST_out)

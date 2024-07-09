@@ -145,9 +145,11 @@ WORKDIR /opt/docker
 
 ### Plasmidfinder
 RUN git clone https://bitbucket.org/genomicepidemiology/plasmidfinder_db.git
+RUN git clone https://bitbucket.org/genomicepidemiology/plasmidfinder.git
 WORKDIR /opt/docker/plasmidfinder_db
 RUN python INSTALL.py /opt/docker/kma/kma_index non_interactive
 WORKDIR /opt/docker
+
 
 ### Wyspy wirulencji
 RUN git clone https://bitbucket.org/genomicepidemiology/spifinder_db.git
