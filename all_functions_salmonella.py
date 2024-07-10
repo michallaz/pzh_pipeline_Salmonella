@@ -70,7 +70,7 @@ def getST(MLSTout, profile_file):
                 ST_dict = elementy[0] # ST w pliku z profilami
                 lista_ST = list(map(int,elementy[1:]))
                 slownik_roznic[ST_dict] = 3200
-                slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 or y > 0))
+                slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 and y > 0))
                 # znalzlem pasujacy hit przerywam
                 if slownik_roznic[ST_dict] == 0:
                     break
