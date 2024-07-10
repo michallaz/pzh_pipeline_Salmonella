@@ -82,6 +82,31 @@ process run_fastqc {
   """
 }
 
+process run_fastqc_nanopore {
+  // Lekko zmodyfkowany modul z sars-a
+  tag "fastqc for sample ${x}"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
+  input:
+  tuple val(x), path(reads)
+  output:
+  tuple path("*_fastqc.txt"), path("*fastqc.html")
+
+  script:
+  """
+  QUALITY=2
+  fastqc --format fastq \
+         --threads ${params.cpus} \
+         --memory 2024 \
+         --extract \
+         --delete \
+         --outdir . \
+         ${reads}
+    r1=\$(basename ${reads} .fastq.gz)
+    /data/parse_fastqc_output.py \${r1}_fastqc/fastqc_data.txt \${QUALITY} >> ${x}_fastqc.txt
+  """
+}
+
 process clean_fastq {
   // Prosta funkcja zaimplementowa w etoki do czyszczenia plikow fastq, ma na celu rozdzielenie odczytow ktore sa sparowane
   // od tych ktore pary nie maja, trimmowanie odczytow na podstawie jakosci, zmiana nazwy odczytow .
@@ -1241,7 +1266,7 @@ Channel
   .set {initial_fastq}
 
 // FASTQC
-run_fastqc(initial_fastq)
+run_fastqc_nanopore(initial_fastq)
 // Aanliza zanieczyszczen
 run_kraken2_nanopore(initial_fastq)
 
