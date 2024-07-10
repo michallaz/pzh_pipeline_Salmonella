@@ -63,7 +63,7 @@ process run_fastqc {
   input:
   tuple val(x), path(reads)
   output:
-  tuple path("*forward_fastqc.txt"), path("*reverse_fastqc.txt")
+  tuple path("*forward_fastqc.txt"), path("*reverse_fastqc.txt"), path("*fastqc.html")
 
   script:
   """
@@ -332,22 +332,24 @@ import  sys
 sys.path.append('/data')
 from all_functions_salmonella import *
 
+# zostawiamy wczytanie profili dla 7 genomwego bo jest szybkie i pozwala ladnie parsowac wynik
+# nie jest jednak potrzebne dla samego szukania pasujacego ST dla zidentyfikowanego zestawu alleli w probce 
+
 known_profiles, klucze = create_profile('/Achtman7GeneMLST_entero/MLST_profiles.txt')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
-matching_profile = getST(MLSTout = identified_profile, \
-                         profile_dict = known_profiles, \
-                         lista_kluczy = klucze)
+matching_profile, min_value = getST(MLSTout = identified_profile, \
+                              profile_file = '/Achtman7GeneMLST_entero/MLST_profiles.txt')
 
   
 
-if isinstance(matching_profile, str) and int(matching_profile) != 0:
-	# we identified only one matching profile 
+if isinstance(matching_profile, str):
+	# we identified matching profile 
 	formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
 	with open('parsed_7MLST.txt', 'w') as f:
 		f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
 		f.write(f'{matching_profile}\\t{formatted_string}\\t0\\n')
 elif isinstance(matching_profile, list):
-	# no matching profile in the database we print all profiles with distance 1
+	# no matching profile in the database we print all profiles with smallest identified distance
 	formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
 	with open('parsed_7MLST.txt', 'w') as f:
 		f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
@@ -356,12 +358,6 @@ elif isinstance(matching_profile, list):
 			formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**known_profiles[hit])
 			f.write(f'{hit}\\t{formatted_string}\\t1\\n')
 		
-else:
-	#No matching profiles with distance 1
-	with open('parsed_7MLST.txt', 'w') as f:
-		f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
-		f.write(f'Novel\\t{formatted_string}\\t0\\n')
-		f.write(f'No matching profiles with at most 1 allelic difference')
 
 """
 }
@@ -499,28 +495,23 @@ import  sys
 sys.path.append('/data')
 from all_functions_salmonella import *
 
-known_profiles, klucze = create_profile('/cgMLST2_entero/profiles.list')
+#known_profiles, klucze = create_profile('/cgMLST2_entero/profiles.list')
 identified_profile = parse_MLST_blastn('cgMLST.txt')
-matching_profile = getST(MLSTout = identified_profile, \
-			profile_dict = known_profiles, \
-			lista_kluczy = klucze)
+matching_profile, min_value = getST(MLSTout = identified_profile, \
+                                    profile_file = '/cgMLST2_entero/profiles.list')
 
 
 
 if isinstance(matching_profile, str) and int(matching_profile) != 0:
 	# we identified only one matching profile
 	with open('parsed_cgMLST.txt', 'w') as f:
-		f.write(f'{matching_profile}\\t0\\n')
+		f.write(f'{matching_profile}\\t{min_value}\\n')
 elif isinstance(matching_profile, list):
-	# no matching profile in the database we print all profiles with distance 1
+	# no matching profile in the database we print all profiles with smallest possible distance
 	with open('parsed_cgMLST.txt', 'w') as f:
-		f.write(f'Multiple_distance1\\t1\\n')
+            for element in matching_profile:
+                f.write(f'{element}\\t{min_value}\\n')
 
-elif isinstance(matching_profile, dict):
-	#No matching profiles with distance 1
-	with open('parsed_cgMLST.txt', 'w') as f:
-		for klucz,wartosc in matching_profile.items():
-			f.write(f'{klucz}:{wartosc}\\n')
 
 """
 }

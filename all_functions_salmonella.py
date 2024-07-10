@@ -28,7 +28,65 @@ def create_profile(profile_file):
                         slownik_profili[elementy[0]][lista_kluczy[indeks]] = int(wartosc)
     return slownik_profili, lista_kluczy
 
-def getST(MLSTout, profile_dict, lista_kluczy):
+def getST(MLSTout, profile_file):
+    """
+    Funkcja do porownywania dwoch slownikow. Oba slowniki musza miec identyczne klucze (w tym wypadku odpowiadajace
+    loci z danego MLST). MLSTout to zwykly slownik,na tomiast profile_dict to slownik slownikow wynik funkcji
+    create_profile. Jeśli nie znajdziemy ST dla slownika MLSToit , to 1. tworzymy nowy ST dla niego (int, +1 w stosunku
+    do największego ST obecnego w profile_dict); 2. updatujemy plik profile_file o nowy ST.
+    :param MLSTout: slownik
+    :param profile_dict: slownik wygenerowany create_profile
+    :param profile_file: String do pliku profiles
+    :param lista_kluczy: list, lsta posortowanych alleli w danym schemacie
+    :return: string, sequence type
+    """
+
+    #pierwszy przelot potrzebujemy listy kluczy/alleli w danym profilu
+    with open(profile_file) as f:
+        for line in f:
+            if re.search('ST', line):
+                # jestesmy w wierszy naglowkowym tworzymy liste nazw, ktora posluzy jako klucze w slowniku
+                lista_kluczy=line.rsplit()[1:] # ST nie jest kluczem
+                break
+
+
+    slownik_roznic = {} #slownik ktory jako klucze ma nazwe profilu, jako wartosc ilosc roznic do "naszej" probki
+
+    # upewniamy sie ze allele dla przewidywanego zestawu alleli sa w odpowidniej kolejnosci
+
+    lista_probki = [MLSTout[x] for x in lista_kluczy]
+
+    # szukamy w pliku z profilami takiego zestawu alleli ktore maja
+    # identyczne wartosci jak nasza probka
+    # jesli takiego nie znajdziemy szukamy ST o najnizszej wartosci
+
+    with open(profile_file) as f:
+        for line in f:
+            if re.search('ST', line):
+                pass
+            else:
+                elementy = line.rsplit()
+                # tworzymy slownik dla danego ST
+                ST_dict = elementy[0] # ST w pliku z profilami
+                lista_ST = list(map(int,elementy[1:]))
+                slownik_roznic[ST_dict] = 3200
+                slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 or y > 0))
+                # znalzlem pasujacy hit przerywam
+                if slownik_roznic[ST_dict] == 0:
+                    break
+
+    if 0 in slownik_roznic.values():
+        ST = [x for x, y in slownik_roznic.items() if y == 0][0]
+        return ST, 0
+    else:
+        min_value = min(list(slownik_roznic.values()))
+        ST = [x for x, y in slownik_roznic.items() if y == min_value]
+        # ST is a list with ST with a smallest distance possible
+        return ST, min_value
+
+
+
+def _getST(MLSTout, profile_dict, lista_kluczy):
     """
     Funkcja do porownywania dwoch slownikow. Oba slowniki musza miec identyczne klucze (w tym wypadku odpowiadajace
     loci z danego MLST). MLSTout to zwykly slownik,na tomiast profile_dict to slownik slownikow wynik funkcji
@@ -51,6 +109,8 @@ def getST(MLSTout, profile_dict, lista_kluczy):
         slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 or y > 0))
         # W cgMLST czasami sa 0 lub wartosci <0 ktore chyba nie sa uwzgledniane
         # przy wyborze ST
+        if slownik_roznic[ST_dict] == 0:
+            break
 
     if 0 in slownik_roznic.values():
         ST = [x for x, y in slownik_roznic.items() if y == 0][0]
