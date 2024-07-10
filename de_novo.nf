@@ -1,12 +1,14 @@
 params.cpus = 25
-params.min_coverage_ratio = 0.1 // Etoki odrzuca contigi ktorych srednie pokrycie jest mniejsze niz 0.2 globalnego pokrycia
+params.min_coverage_ratio = 0.1 
+// Etoki odrzuca contigi ktorych srednie pokrycie jest mniejsze niz 0.2 globalnego pokrycia
 // my nie jestesmy tak ostrzy dajemy 0.1 co tlumaczymy uzyciem innego alignera
-
 // params.min_coverage_ratio_nanopore = 0.1 // Ten parametr nie jest moze  posluzy do nanopre'a
 
 params.species = 's.enterica' // inne mozliwosci to c.jejuni c.coli e.coli . Gatungi do resfindera
-
 params.reads = '/mnt/sda1/michall/Salmonella/*_R{1,2}_001.fastq.gz'
+
+// eqluowane w main worflow jesli jest cos innego niz illumina
+// to wchozi sciezka nanoporowe'a
 params.machine = 'Illumina'
 
 params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/" // na sztywno bo nie chce mi sie tego ustawiac za kazdym razem
@@ -22,7 +24,6 @@ params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwI
 // infl_nanopore_eqa:2.18 - tu jest medaka
 
 
-// Dodac analize fastqc 
 
 process check_etoki {
   // Testowa funkcja
@@ -51,6 +52,33 @@ process view_output {
   script:
   """
   echo $x
+  """
+}
+
+process run_fastqc {
+  // Lekko zmodyfkowany modul z sars-a
+  tag "fastqc for sample ${x}"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
+  input:
+  tuple val(x), path(reads)
+  output:
+  tuple path("*forward_fastqc.txt"), path("*reverse_fastqc.txt")
+
+  script:
+  """
+  QUALITY=5
+  fastqc --format fastq \
+         --threads ${params.cpus} \
+         --memory 2024 \
+         --extract \
+         --delete \
+         --outdir . \
+         ${reads[0]} ${reads[1]}
+    r1=\$(basename ${reads[0]} .fastq.gz)
+    r2=\$(basename ${reads[1]} .fastq.gz)
+    /data/parse_fastqc_output.py \${r1}_fastqc/fastqc_data.txt \${QUALITY} >> ${x}_forward_fastqc.txt
+    /data/parse_fastqc_output.py \${r2}_fastqc/fastqc_data.txt \${QUALITY} >> ${x}_reverse_fastqc.txt
   """
 }
 
@@ -608,11 +636,12 @@ process run_kraken2_illumina {
           --gzip-compressed \
           --minimum-base-quality ${params.quality_initial} \
           --use-names ${reads[0]} ${reads[1]} >> report_kraken2_individualreads.txt 2>&1
-  # parse kraken extract two most abundant species
-  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w S | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
-  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w S | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
-  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w S | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
-  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w S | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
+  # parse kraken extract two most abundant FAMILIES
+  LEVEL="G" # G to chyba rodzzaj (genus ?)  S to pewnie gatunek (SPECIES)
+  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
+  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
+  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
+  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
 
   echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> summary_kraken.txt
   """
@@ -721,7 +750,10 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
 
 process extract_historical_data {
   // W przypadku znalezienia ST ktory jest  bazie enterobase
-  // Wyciagamy informacje gdzie i kiedy byly zebrane probki z tym ST 
+  // Wyciagamy informacje gdzie i kiedy byly zebrane probki z tym ST
+  // Generalnie rozszerzenie o pytania o ST na konkretnym poziomie hierCC
+  // mozna latwo doimplementowac, choc wymagaja dodatkowe odpytania bazy w tablei 'STs'
+  // tabela straindata zawierajaca informacje o ST nie zawiera informacji o phierCC 
   container  = 'salmonella_illumina:2.0'
   tag "Extracting historical data for sample $x"
   publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
@@ -761,20 +793,51 @@ def getST(my_file):
 
 my_ST = getST('parsed_cgMLST.txt')
 
-# To DO
-# To pobierze wszystkie strains
-adress = 'https://enterobase.warwick.ac.uk/api/v2.0/senterica/strains?my_strains=false&sortorder=asc&return_all=true&offset=0'
+
+# downloading entrire strain table 
+address = 'https://enterobase.warwick.ac.uk/api/v2.0/senterica/strains?my_strains=false&sortorder=asc&return_all=true&offset=0'
 response = urlopen(__create_request(address))
 data = json.load(response)
-# iterujac po data mozemy znalezc barcode
-data['Strains'][100]['strain_barcode']
-i mozemy go uzyc aby odpytac bazw straindata
-'https://enterobase.warwick.ac.uk/api/v2.0/senterica/straindata?sortorder=asc&offset=0&barcode=SAL_CA6982AA'
 
-baza strainada zwraca nam st_id 
-data2['straindata']['SAL_CA6982AA']['sts'][3]['st_id']
-a majac st_is mozemy odpytac baze sts tak jak to robimy przy hiercc aby dostac informacje o hiercc
-problem to to za musze odpytac ta baze bardzo wiele razy w ten sposob ...
+# in dict - keys - strain name; values - 2- element list with countr and collection year 
+strain_info= {}
+for strain in data['Strains']:
+    strain_info[strain['strain_barcode']] = []
+    strain_info[strain['strain_barcode']].append(strain['country'])
+    strain_info[strain['strain_barcode']].append(strain['collection_year'])
+
+# querying "strain" table in f'{step}'-sized chunks 
+# 150 seems to be optimal number , larger quieries are rejected
+start = 0
+step = 150
+orignal_list = list(strain_info.keys())
+for end in range(step,len(orignal_list), step):
+    # create chunls
+    #print(end) # for tests
+    list_of_ids = orignal_list[start:end] # extract barcodes in chunks
+    # build url link
+    address2 = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/straindata?limit={step}&sortorder=asc&" + ('barcode={}&'*step).format(*list_of_ids) + "offset=0"	
+    response2 = urlopen(__create_request(address2))
+    data2 = json.load(response2)
+    # parse output basically we remove data from strain_info if the do not have required Sequence type
+    for klucz in data2['straindata']:
+        to_remove = 1
+        for scheme in data2['straindata'][klucz]['sts']:
+            if 'cgMLST_v2' in scheme.values() and scheme['st_id'] == my_ST:
+                strain_info[klucz].append(scheme['st_id'])
+                to_remove = 0
+        if to_remove:
+            try:
+                del(strain_info[klucz])
+            except:
+                print(f'No such key {klucz}')
+    start = end
+
+# na tym etapie strain_info powinno zawierac tylko recody z naszym ST
+with open('enterobase_historical_data.txt', 'w') as f:
+    f.write(f'Country\\tYear\\tST\\n'
+    for klucz,wartosc in strain_info.items():
+        f.write(f'{wartosc[0]}\\t{wartosc[1]}\\t{wartosc[2]}\\n'
 """
 }
 
@@ -923,9 +986,7 @@ process run_pilon_nanopore {
 process run_medaka {
   // wygladzanie genomu medaka, nanopolish nie dziala bo nie mamy pliko fast5
 
-  // UWAGA KONTENER Z MEDAKA !!!
-  container  = 'infl_nanopore_eqa:2.18'
-  // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
+  container  = 'salmonella_illumina:2.0'
   tag "Pilon for sample $x"
   publishDir "pipeline_wyniki/pilon/${x}", mode: 'copy', pattern: 'latest_pilon.*'
   input:
@@ -1152,6 +1213,9 @@ Channel
   .fromFilePairs(params.reads)
   .set {initial_fastq}
 
+// FASTQC
+run_fastqc(initial_fastq)
+
 // kraken2 analiza kontmainacji innymi organizmami
 run_kraken2_illumina(initial_fastq)
 
@@ -1185,6 +1249,8 @@ Channel
   .map {it -> tuple(it.getName().split("\\.")[0], it)}
   .set {initial_fastq}
 
+// FASTQC
+run_fastqc(initial_fastq)
 // Aanliza zanieczyszczen
 run_kraken2_nanopore(initial_fastq)
 
@@ -1212,6 +1278,7 @@ run_plasmidfinder(final_assembly)
 cgMLST_out = run_cgMLST(final_assembly)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
 run_pHierCC(parse_cgMLST_out)
+// extract_historical_data(parse_cgMLST_out) // NIE WYKONYWAC POKI CO POKI ENTEROBASE NIE POTWIERDZI ZE TAK MOZNA
 prokka_out = run_prokka(final_assembly)
 run_VFDB(prokka_out)
 run_spifinder(final_assembly)

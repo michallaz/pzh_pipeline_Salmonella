@@ -285,7 +285,31 @@ RUN make -j 20
 ## Nanopolish ma specjalnie bez opcji -j bo potrafi sie nie budowac obraz przy wielu procesorach
 ## RUN make 
 
-COPY all_functions_salmonella.py run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py /data/
+## medaka
+WORKDIR /opt/docker
+RUN pip install urllib3==1.26.16 pysam==0.21.0 parasail==1.3.4
+RUN pip install pyabpoa==1.4.0 
+RUN apt install python3-venv libncurses5-dev -y
+#RUN pip install tensorflow==2.12.0 # wersja wg https://www.tensorflow.org/install/source?hl=pl#gpu dla cuda11.2 i cuDNN8.1 to 2.11.0, najnowsza wersja to 2.13.0, medaka w requirments ma  2.10.0  ale robie nizej sed-a aby podbic to do wersji 2.12 bo inaczej tensorrt w wersji 8 krzyczy
+#RUN pip install tensorrt
+#ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib/python3.8/dist-packages/tensorrt_libs"
+RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash
+RUN apt install git-lfs
+RUN git lfs install
+RUN git clone https://github.com/nanoporetech/medaka.git
+WORKDIR /opt/docker/medaka
+# RUN sed -i 's/tensorflow~=2.10.0/tensorflow==2.12.0/' requirements.txt
+RUN make install_root
+
+# fastqc
+ARG FASTQC_VERSION="0.12.1"
+WORKDIR /opt/docker
+RUN curl -fsSL "https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v${FASTQC_VERSION}.zip" -o "fastqc_v${FASTQC_VERSION}.zip" && \
+    unzip "fastqc_v${FASTQC_VERSION}.zip" && \
+    rm "fastqc_v${FASTQC_VERSION}.zip"
+ENV PATH="/opt/docker/FastQC:$PATH"
+
+COPY all_functions_salmonella.py run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py /data/
 WORKDIR /data
 CMD ["/bin/bash"]
 #ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]
