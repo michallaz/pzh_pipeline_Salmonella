@@ -1,6 +1,9 @@
 import os
 import re
 from Bio import SeqIO
+import gzip
+import numpy as np
+
 
 def create_profile(profile_file):
     """
@@ -54,12 +57,14 @@ def getST(MLSTout, profile_file):
 
     # upewniamy sie ze allele dla przewidywanego zestawu alleli sa w odpowidniej kolejnosci
 
-    lista_probki = [MLSTout[x] for x in lista_kluczy]
+    lista_probki = [int(MLSTout[x]) for x in lista_kluczy]
 
     # szukamy w pliku z profilami takiego zestawu alleli ktore maja
     # identyczne wartosci jak nasza probka
     # jesli takiego nie znajdziemy szukamy ST o najnizszej wartosci
 
+    minimalna_roznica = 3200
+    allele_list_lowest_difference = []
     with open(profile_file) as f:
         for line in f:
             if re.search('ST', line):
@@ -70,19 +75,92 @@ def getST(MLSTout, profile_file):
                 ST_dict = elementy[0] # ST w pliku z profilami
                 lista_ST = list(map(int,elementy[1:]))
                 slownik_roznic[ST_dict] = 3200
-                slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 and y > 0))
+                # Spradzic czy zadziala dla 7MLST
+                slownik_roznic[ST_dict] = calculate_phiercc_distance(lista_probki, lista_ST)
+                #slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 and y > 0))
                 # znalzlem pasujacy hit przerywam
+                if slownik_roznic[ST_dict] < minimalna_roznica:
+                    minimalna_roznica = slownik_roznic[ST_dict]
+                    allele_list_lowest_difference = "\t".join(map(str, elementy))
                 if slownik_roznic[ST_dict] == 0:
                     break
 
-    if 0 in slownik_roznic.values():
-        ST = [x for x, y in slownik_roznic.items() if y == 0][0]
-        return ST, 0
+    # zwracamy tylko NAJMNIEJSZY ST z listy
+    # innych ST i tak nie bede uzywal
+    min_value = min(list(slownik_roznic.values()))
+    try:
+        ST = np.min([int(x) for x, y in slownik_roznic.items() if y == min_value])
+    except:
+        # obejscie dla ST w postaci local_{numer}
+        ST = np.min([int(x.split('_')[1]) for x, y in slownik_roznic.items() if y == min_value])
+        ST = f'local_{ST}'
+    return str(ST), min_value, allele_list_lowest_difference
+
+def write_novel_sample(profile, output_file):
+    """
+    Write information about novel sample into a file
+    :param profile: String to be saved
+    :param output_file: Path to a file where string will be saved, must exists
+    :return: bool
+    """
+    if os.path.exists(output_file):
+        with open(output_file, 'a') as f:
+            f.write(f'{profile}\n')
     else:
-        min_value = min(list(slownik_roznic.values()))
-        ST = [x for x, y in slownik_roznic.items() if y == min_value]
-        # ST is a list with ST with a smallest distance possible
-        return ST, min_value
+        raise(f'Provided file {output_file} does not exist')
+
+
+def calculate_phiercc_distance(wektor_x, wektor_y, allowed_missing=0.05):
+    """
+    Funkcja wyciagnieta z kodu do pHierCC liczy dystans miedzy dwoma profilami
+    :param wektor_x: Wektor pierwszego profilu
+    :param wektor_y:  Wektor drugiego profilu
+    :param allowed_missing: paramter z phierCC uzywany do liczenia dystancu
+    :return: int, odleglosc miedzy profilami
+    """
+
+    wektor_x = np.array(wektor_x)
+    wektor_y = np.array(wektor_y)
+    n_loci = len(wektor_y)
+    if len(wektor_y) != len(wektor_y):
+        raise('Provided profiles have different lengths')
+
+
+    rl, ad, al = 0., 1e-4, 1e-4
+
+    # rl ile mamy nie zerowych alleli w drugim analizowanym ST
+    ql = np.sum(wektor_x > 0)
+    rl = np.sum(wektor_y > 0)
+    # ile mamy WSPOLNYCH niezerowych alleli w obu ST
+    common_non_zero = (wektor_x > 0) & (wektor_y > 0)
+    al += np.sum(common_non_zero)
+    # ile mamy NIEZEROWYCH alleli ktore przyjmuja ROZNA wartosc
+    ad += np.sum(wektor_x[common_non_zero] != wektor_y[common_non_zero])
+    # Wieksza z wartosci ql i rl pomniejszona o dopuszczalna liczbe zerowych alleli
+    ll = max(ql, rl) - allowed_missing * n_loci
+    ll2 = ql - allowed_missing * n_loci
+
+    if ll2 > al:
+        ad += ll2 - al
+        al = ll2
+
+    if ll > al:
+        ad += ll - al
+        al = ll
+
+    dist = int(ad / al * n_loci + 0.5)
+
+    return dist
+
+def predict_hiercc(closest_ST, closest_ST_distance, pHierCC_profile = ''):
+    """
+    Funkcja do przypisywania poziomow phiercc dla probek dla ktorych nie znaleziono "idealnego" profilu
+    tzn sa nowe ...
+    :param closest_ST:
+    :param closest_ST_distance:
+    :param pHierCC_profile:
+    :return:
+    """
 
 
 

@@ -362,26 +362,16 @@ from all_functions_salmonella import *
 
 known_profiles, klucze = create_profile('/Achtman7GeneMLST_entero/MLST_profiles.txt')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
-matching_profile, min_value = getST(MLSTout = identified_profile, \
-                              profile_file = '/Achtman7GeneMLST_entero/MLST_profiles.txt')
+matching_profile, min_value, _ = getST(MLSTout = identified_profile, \
+                                       profile_file = '/Achtman7GeneMLST_entero/MLST_profiles.txt')
 
   
-
-if isinstance(matching_profile, str):
-	# we identified matching profile 
-	formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
-	with open('parsed_7MLST.txt', 'w') as f:
-		f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
-		f.write(f'{matching_profile}\\t{formatted_string}\\t0\\n')
-elif isinstance(matching_profile, list):
-	# no matching profile in the database we print all profiles with smallest identified distance
-	formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
-	with open('parsed_7MLST.txt', 'w') as f:
-		f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
-		f.write(f'Novel\\t{formatted_string}\\t0\\n')
-		for hit in matching_profile:
-			formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**known_profiles[hit])
-			f.write(f'{hit}\\t{formatted_string}\\t1\\n')
+# We only print one ST, one with the lowest possible ID and lowest identified distance
+# This info is returned via getST function in all_functions_salmonella
+formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
+with open('parsed_7MLST.txt', 'w') as f:
+    f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
+    f.write(f'{matching_profile}\\t{formatted_string}\\t{min_value}\\n')
 		
 
 """
@@ -498,21 +488,20 @@ process run_cgMLST {
 
 process parse_cgMLST {
   // Funkcja do parsowania wynikow run_cgMLST
-  // Zwraca plik parsed_cgMLST.txt ktory albo zawiera pojedyncza cyfre z infromrmacja o pasujacym profilu
-  // "Multiple_distance1" jesli jest wiele ST z odlegloscia 1
-  // lub wiele linijek w trypi ST:odleglosc jesli nie bylo ST z odlegloscia 0 lub 1
-  // UWAGA wczytanie wszystkich 400k profili wymaga ponad 50 Gb Ram-u poki co
-  // wiec lepiej nie puszczac tego dla wiecej niz 4 probek na raz
-
+  // Zwraca plik parsed_cgMLST.txt ktory zawiera w pierwszej kolumnie identyfikator ST (albo pojedyncza cyfra jesli dany ST jest juz znany bazie enterobase) albo 
+  // local_cyfra (jesli ST jest nieznany bazie enterobase)
+  // druga kolumna w tym pliku to albo 0 (dany ST zostal znaleziony w bazie) albo NOVEL jesli w bazie entero ani local nie ma takiego sample'a 
   container  = 'salmonella_illumina:2.0'
   containerOptions '--volume /mnt/sda1/michall/db/cgMLST_30042024:/cgMLST2_entero'
   tag "Parsing cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'parsed_cgMLST.txt'
-  maxForks 4
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'matching_allel_list.txt'
+  maxForks 1 // ustawiamy maxforks 1 dzieki temu mam nadzieje mamy pewnosc ze baza "local" bedzie poprawnie updatowana
+  // choc na pewno zadziala to wolniej
   input:
   tuple val(x), path('cgMLST.txt')
   output:
-  tuple val(x), path('parsed_cgMLST.txt')
+  tuple val(x), path('parsed_cgMLST.txt'), path('matching_allel_list.txt')
   script:
 """
 #!/usr/bin/python
@@ -522,20 +511,49 @@ from all_functions_salmonella import *
 
 #known_profiles, klucze = create_profile('/cgMLST2_entero/profiles.list')
 identified_profile = parse_MLST_blastn('cgMLST.txt')
-matching_profile, min_value = getST(MLSTout = identified_profile, \
-                                    profile_file = '/cgMLST2_entero/profiles.list')
+matching_profile, min_value, allele_list_lowest_difference = getST(MLSTout = identified_profile, 
+                                                                   profile_file = '/cgMLST2_entero/profiles.list')
 
 
+if min_value == 0:
+    # found a matching profile in "core" database
+    with open('parsed_cgMLST.txt', 'w') as f:
+        f.write(f'{matching_profile}\\t{min_value}\\tIN_ENTERO\\n')
+else:
+    # look for a profile in "local" database 
+    matching_profile_local, min_value_local, allele_list_lowest_difference_local = getST(MLSTout = identified_profile,
+                                                                                   profile_file = '/cgMLST2_entero/local/profiles_local.list')
+    if min_value_local == 0:
+        # Znalazlem wpis w bazie local (nie musze updatowac lokalnych plikow)
+        # ale zapisuje odleglosc zarowno do ST z bazy entero (potrzebuje do phierCC)
+        with open('parsed_cgMLST.txt', 'w') as f:
+            f.write(f'{matching_profile_local}\\t{min_value}\\tIN_LOCAL\\n')
+    else:
+        # nie znaleziono pasujacego profilu rowniez w bazie local
+        # dodaje nowy wpis do tej bazy
+        # Musze pobrac wpis local ST maja postac local_1, local_2 itd ...
+        last_ST = 0
+        with open('/cgMLST2_entero/local/profiles_local.list') as f:
+            for line in f:
+                line = line.rsplit()
+                if 'local' in line[0]:
+                    last_ST = line[0].split('_')[1]
+        
+        # dodajemy nowy ST do bazy local
+        
+        novel_profile_ST = f'local_{int(last_ST)+1}'
+        to_save = "\t".join(map(str, identified_profile))
+        write_novel_sample(f'{novel_profile_ST}\t{to_save}', '/cgMLST2_entero/local/profiles_local.list')
+        
+        # no na koniec zapisuje wynik do outputu, ALE UWAGA MIN_VALUE TO ZAWSZE ODLEGLOSC DO NAJBLIZSZEGO ST Z ENTERO !
 
-if isinstance(matching_profile, str) and int(matching_profile) != 0:
-	# we identified only one matching profile
-	with open('parsed_cgMLST.txt', 'w') as f:
-		f.write(f'{matching_profile}\\t{min_value}\\n')
-elif isinstance(matching_profile, list):
-	# no matching profile in the database we print all profiles with smallest possible distance
-	with open('parsed_cgMLST.txt', 'w') as f:
-            for element in matching_profile:
-                f.write(f'{element}\\t{min_value}\\n')
+        with open('parsed_cgMLST.txt', 'w') as f:
+            f.write(f'{novel_profile_ST}\\t{min_value}\\tNOVEL_LOCAL\\n')
+
+# ZAPISUJE NAJBLIZSZY ST I JEGO ALLELE Z BAZY ENETRO  potrzebujeto do liczenia hierCC
+with open('matching_allel_list.txt', 'w') as f:
+    f.write(allele_list_lowest_difference)
+         
 
 
 """
@@ -676,7 +694,7 @@ process run_pHierCC {
   tag "Predicting hierCC levels for sample $x"
   publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
   input:
-  tuple val(x), path('parsed_cgMLST.txt')
+  tuple val(x), path('parsed_cgMLST.txt'), path('matching_allel_list.txt')
   output:
   tuple val(x), path('parsed_phiercc_enterobase.txt'), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt')
   script:
@@ -691,6 +709,8 @@ import urllib
 import base64
 import json
 import gzip
+import re
+import numpy as np
 
 API_TOKEN = "${params.enterobase_api_token}"
 
@@ -701,66 +721,97 @@ def __create_request(request_str):
     return request
 
 def getST(my_file):
-    # prosta funkcja zwraca wszystkie numery ST z odlegloscia 0 (patrz funkcja parse_cgMLST)
-    my_ST = []
+    # prosta funkcja zwraca numer ST sample'a oraz odleglosc do najblzszego znanego ST z bazy enterobase
     with open(my_file) as f:
         for line in f:
             line = line.rsplit()
-            if int(line[1]) == 0:
-                my_ST.append(line[0])
-    return my_ST
+    return line[0], int(line[1])
 
-my_ST = getST('parsed_cgMLST.txt')
-if len(my_ST) == 0:
-    # nie znaleziono ST inicjalizuje puste pliki
-    with open('parsed_phiercc_enterobase.txt', 'w') as f:
-        f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
-        f.write(f'UNK\\tUNK\\n')
+def get_matching_ST(my_file):
+    # funkcja bierze plik matching_allel_list.txt' i wyciaga z niego pierwszy element (najblizy ST z bazye entero)
+    # i elementy 1: (profil alleli tego ST)
+    with open(my_file) as f:
+        for line in f:
+            elementy = line.rsplit()
+    return elementy[0], elementy[1:]
 
-    with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f:
-        f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
-        f.write(f'UNK\\tUNK\\n')
- 
-    with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
-        f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
-        f.write(f'UNK\\tUNK\\n')
-    
-# wyciaganie danych z enterobase	
+my_ST, my_dist = getST('parsed_cgMLST.txt')
+matching_ST, matching_ST_allels =  get_matching_ST('matching_allel_list.txt')
+
+
+# mamy nastepujace mozliwosci  my_dist wynosi 0 lub nie-0  (czyli znalzlem cos niwego badz nie)
+# jesli wynosi 0 nie ma 
+# jesli jest cos nowego do ide sciezka (cos starego i z bazy entero) ale modyfikuje linijki w zaleznosci od dystansu i dodaje je do bazy local
+
+
+# Tworzenie lokalnych plikow wynikowych
 with open('parsed_phiercc_enterobase.txt', 'w') as f:
     f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
-    for ST in my_ST:
-        address = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/cgMLST_v2/sts?st_id={ST}&scheme=cgMLST_v2&limit=5"
-        try:
-            response = urlopen(__create_request(address))
-            data = json.load(response)
-            #data['STs'][0]['info']['hierCC']
-            formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2600}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
-            f.write(f'{ST}\\t{formatted_string}\\n')
-        except:
-            f.write(f'{ST}\\tUNK\\n')
-            
 
-# wyciaganie danych z moich przeliczonych wczesniej plikow
 with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f:
     f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
-    for ST in my_ST:
-        with gzip.open('/cgMLST2_entero/profile_single_linkage.HierCC.gz') as f2:
-            for line in f2:
-                line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
-                if line[0] == ST:
-                    f.write(f'{line[0]}\\t{line[1]}\\t{line[3]}\\t{line[6]}\\t{line[11]}\\t{line[21]}\\t{line[51]}\\t{line[101]}\\t{line[201]}\\t{line[401]}\\t{line[901]}\\t{line[2001]}\\t{line[2601]}\\t{line[2851]}\\n')
-                    break # konczymy iterowac pl pliku
-        
+
 with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
     f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
-    for ST in my_ST:
-        with gzip.open('/cgMLST2_entero/profile_complete_linkage.HierCC.gz') as f2:
-            for line in f2:
-                line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
-                if line[0] == ST:
-                    f.write(f'{line[0]}\\t{line[1]}\\t{line[3]}\\t{line[6]}\\t{line[11]}\\t{line[21]}\\t{line[51]}\\t{line[101]}\\t{line[201]}\\t{line[401]}\\t{line[901]}\\t{line[2001]}\\t{line[2601]}\\t{line[2851]}\\n')
-                    break # konczymy iterowac pl pliku
 
+    
+# 1. Szukanie w bazie enterobase
+with open('parsed_phiercc_enterobase.txt', 'a') as f:
+    address = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/cgMLST_v2/sts?st_id={matching_ST}&scheme=cgMLST_v2&limit=5"
+    try:
+        response = urlopen(__create_request(address))
+        data = json.load(response)
+        lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850'] # Enterobase 3ma tylko te wartosci
+        lista_poziomow = [data['STs'][0]['info']['hierCC'][x] for x in lista_kluczy] # lista z uporzadkowanymi poziomami
+            
+        # modyfikacja wartosci w lista_poziomow na podstawie 
+	# wartsoci z hierCC z odelgoscia mniejsza niz dystans do najblzszego znangeo przedstawiciela z enterobase sa podmieniane na my_ST 
+        try:
+            last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
+            lista_poziomow[:last_index] = [my_ST] * last_index
+        except IndexError:
+            pass
+        formatted_string = "\t".join(list(map(str, lista_poziomow)))
+        #formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2600}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
+        f.write(f'{my_ST}\\t{formatted_string}\\n')
+    except:
+         print('Error\\n')
+# 2. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
+with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_single_linkage.HierCC.gz') as f2:
+    # wynikow szukamy w f2, a zapisujemy do f
+    for line in f2:
+        line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
+        if line[0] == matching_ST:
+            # Znalzlem linijke z najblizszym ST poprawiam ja aby uwzglednic nie idealny hit
+            lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850'] # jest ekstra d0 bo plik 
+            lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
+            try:
+                last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
+                lista_poziomow[:last_index] = [my_ST] * last_index
+            except IndexError:
+                pass
+            formatted_string = "\t".join(list(map(str, lista_poziomow)))
+            f.write(f'{my_ST}\\t{formatted_string}\\n')
+            # nie ma potrzeby dalszego ogladania pliku
+            break
+
+# 3. Szukanie pHierCC w wynikach 
+with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_complete_linkage.HierCC.gz') as f2:
+    for line in f2:
+        line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
+        if line[0] == matching_ST:
+            # Znalzlem linijke z najblizszym ST poprawiam ja aby uwzglednic nie idealny hiti
+            lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850'] # jest ekstra d0 bo plik
+            lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
+            try:
+                last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
+                lista_poziomow[:last_index] = [my_ST] * last_index
+            except:
+                formatted_string = "\t".join(list(map(str, lista_poziomow)))
+                f.write(f'{my_ST}\\t{formatted_string}\\n')
+            # nie ma potrzeby dalszego ogladania pliku
+            break            
+    
 """
 }
 
@@ -834,7 +885,7 @@ for end in range(step,len(orignal_list), step):
     # build url link
     address2 = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/straindata?limit={step}&sortorder=asc&" + ('barcode={}&'*step).format(*list_of_ids) + "offset=0"	
     response2 = urlopen(__create_request(address2))
-    data2 = json.load(response2)
+    d # zwracamy tylko NAJMNIEJSZY ST z listyata2 = json.load(response2)
     # parse output basically we remove data from strain_info if the do not have required Sequence type
     for klucz in data2['straindata']:
         to_remove = 1
@@ -978,7 +1029,7 @@ process run_pilon_nanopore {
   container  = 'salmonella_illumina:2.0'
   // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
   tag "Pilon for sample $x"
-  publishDir "pipeline_wyniki/pilon/${x}", mode: 'copy', pattern: 'latest_pilon.*'
+  publishDir "pipeline_wyniki/${x}/pilon", mode: 'copy', pattern: 'latest_pilon.*'
   input:
   tuple val(x), path(bam1), path(fasta)
   output:
@@ -1004,7 +1055,7 @@ process run_medaka {
 
   container  = 'salmonella_illumina:2.0'
   tag "Pilon for sample $x"
-  publishDir "pipeline_wyniki/pilon/${x}", mode: 'copy', pattern: 'latest_pilon.*'
+  publishDir "pipeline_wyniki/${x}/medaka", mode: 'copy', pattern: 'latest_pilon.*'
   input:
   tuple val(x), path(bam1), path(fasta)
   output:
@@ -1065,11 +1116,12 @@ process run_kraken2_nanopore {
           --gzip-compressed \
           --minimum-base-quality ${params.quality_initial} \
           --use-names ${reads} >> report_kraken2_individualreads.txt 2>&1
-  # parse kraken extract two most abundant species
-  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w S | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
-  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w S | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
-  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w S | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
-  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w S | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
+  LEVEL="G" # G to chyba rodzzaj (genus ?)  S to pewnie gatunek (SPECIES)
+
+  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
+  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
+  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
+  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
 
   echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> summary_kraken.txt
   """
