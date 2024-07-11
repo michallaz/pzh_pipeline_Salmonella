@@ -362,7 +362,7 @@ from all_functions_salmonella import *
 
 known_profiles, klucze = create_profile('/Achtman7GeneMLST_entero/MLST_profiles.txt')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
-matching_profile, min_value, _ = getST(MLSTout = identified_profile, \
+matching_profile, min_value, _, _ = getST(MLSTout = identified_profile, \
                                        profile_file = '/Achtman7GeneMLST_entero/MLST_profiles.txt')
 
   
@@ -511,7 +511,7 @@ from all_functions_salmonella import *
 
 #known_profiles, klucze = create_profile('/cgMLST2_entero/profiles.list')
 identified_profile = parse_MLST_blastn('cgMLST.txt')
-matching_profile, min_value, allele_list_lowest_difference = getST(MLSTout = identified_profile, 
+matching_profile, min_value, allele_list_lowest_difference, sample_profile = getST(MLSTout = identified_profile, 
                                                                    profile_file = '/cgMLST2_entero/profiles.list')
 
 
@@ -521,7 +521,7 @@ if min_value == 0:
         f.write(f'{matching_profile}\\t{min_value}\\tIN_ENTERO\\n')
 else:
     # look for a profile in "local" database 
-    matching_profile_local, min_value_local, allele_list_lowest_difference_local = getST(MLSTout = identified_profile,
+    matching_profile_local, min_value_local, allele_list_lowest_difference_local, _ = getST(MLSTout = identified_profile,
                                                                                    profile_file = '/cgMLST2_entero/local/profiles_local.list')
     if min_value_local == 0:
         # Znalazlem wpis w bazie local (nie musze updatowac lokalnych plikow)
@@ -542,8 +542,8 @@ else:
         # dodajemy nowy ST do bazy local
         
         novel_profile_ST = f'local_{int(last_ST)+1}'
-        to_save = "\t".join(map(str, identified_profile))
-        write_novel_sample(f'{novel_profile_ST}\t{to_save}', '/cgMLST2_entero/local/profiles_local.list')
+        to_save = "\t".join(map(str, sample_profile))
+        write_novel_sample(f'{novel_profile_ST}\\t{to_save}\\n', '/cgMLST2_entero/local/profiles_local.list')
         
         # no na koniec zapisuje wynik do outputu, ALE UWAGA MIN_VALUE TO ZAWSZE ODLEGLOSC DO NAJBLIZSZEGO ST Z ENTERO !
 

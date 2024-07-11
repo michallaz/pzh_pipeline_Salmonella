@@ -64,7 +64,8 @@ def getST(MLSTout, profile_file):
     # jesli takiego nie znajdziemy szukamy ST o najnizszej wartosci
 
     minimalna_roznica = 3200
-    allele_list_lowest_difference = []
+    slownik_roznic['local_0'] = minimalna_roznica # inicjujemy slownik dummy wartoscia
+    allele_list_lowest_difference = ''
     with open(profile_file) as f:
         for line in f:
             if re.search('ST', line):
@@ -94,7 +95,7 @@ def getST(MLSTout, profile_file):
         # obejscie dla ST w postaci local_{numer}
         ST = np.min([int(x.split('_')[1]) for x, y in slownik_roznic.items() if y == min_value])
         ST = f'local_{ST}'
-    return str(ST), min_value, allele_list_lowest_difference
+    return str(ST), min_value, allele_list_lowest_difference, lista_probki
 
 def write_novel_sample(profile, output_file):
     """
@@ -105,7 +106,7 @@ def write_novel_sample(profile, output_file):
     """
     if os.path.exists(output_file):
         with open(output_file, 'a') as f:
-            f.write(f'{profile}\n')
+            f.write(f'{profile}')
     else:
         raise(f'Provided file {output_file} does not exist')
 
