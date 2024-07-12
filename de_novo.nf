@@ -768,14 +768,15 @@ with open('parsed_phiercc_enterobase.txt', 'a') as f:
 	# wartsoci z hierCC z odelgoscia mniejsza niz dystans do najblzszego znangeo przedstawiciela z enterobase sa podmieniane na my_ST 
         try:
             last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
-            lista_poziomow[:last_index] = [my_ST] * last_index
+            lista_poziomow[:(last_index+1)] = [my_ST] * (last_index + 1)
         except IndexError:
             pass
         formatted_string = "\t".join(list(map(str, lista_poziomow)))
         #formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2600}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
         f.write(f'{my_ST}\\t{formatted_string}\\n')
-    except:
-         print('Error\\n')
+    except HTTPError as Response_error:
+        print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
+
 # 2. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
 with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_single_linkage.HierCC.gz') as f2:
     # wynikow szukamy w f2, a zapisujemy do f
@@ -787,7 +788,7 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgM
             lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
             try:
                 last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
-                lista_poziomow[:last_index] = [my_ST] * last_index
+                lista_poziomow[:(last_index + 1)] = [my_ST] * (last_index +1)
             except IndexError:
                 pass
             formatted_string = "\t".join(list(map(str, lista_poziomow)))
@@ -805,7 +806,7 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/cgM
             lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
             try:
                 last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
-                lista_poziomow[:last_index] = [my_ST] * last_index
+                lista_poziomow[:(last_index+1)] = [my_ST] * (last_index+1)
             except:
                 formatted_string = "\t".join(list(map(str, lista_poziomow)))
                 f.write(f'{my_ST}\\t{formatted_string}\\n')
@@ -946,6 +947,9 @@ process run_flye {
   // -t to liczba watkow CPU
   // -i to liczba powtorzec wygladzania genomy
   // --no-alt-contig to informacja aby nie podawac haplotypow gdyby byly, w koncu salmonella to monoploid ...
+  // --deterministic -  perform disjointig assembly single-threaded program zwraca dla tych samych danych rozne wyniki
+  // wedlug issue z githuba https://github.com/mikolmogorov/Flye/issues/640
+  // ten problem dalej istnieje 
 
   container  = 'salmonella_illumina:2.0'
   tag "Predicting scaffold with flye for sample $x"
@@ -960,7 +964,7 @@ process run_flye {
   """
   # /data/Flye to sciezka z Flye instalowanego z github, uwaga
   # w kontenerze tez jest flye instalowant przez etoki i ten jest w PATH
-  /data/Flye/bin/flye --nano-raw ${fastq_gz} -g 6m -o output -t ${params.cpus} -i 3 --no-alt-contig
+  /data/Flye/bin/flye --nano-raw ${fastq_gz} -g 6m -o output -t ${params.cpus} -i 3 --no-alt-contig --deterministic
 
   """
  
