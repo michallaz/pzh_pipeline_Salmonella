@@ -272,7 +272,12 @@ def parse_MLST_fasta(file_path):
         # opis z etoki jest dosc wystandaryzowany wiec zakladam ze pole description[0] zawiera nazwe wariantu
         # pole 2 zawiera id = wartosc
         # pole 6 zwiera identycznosc sekwencyjna miedzy referencja a tym co jest obserwowane w probce
-        slownik_alleli[record.description.split(' ')[0]] = int(record.description.split(' ')[2].split('=')[1])
+        try:
+            slownik_alleli[record.description.split(' ')[0]] = int(record.description.split(' ')[2].split('=')[1])
+        except ValueError:
+            # nie znaleziono allelu i funkcja int zwraca blad
+            slownik_alleli[record.description.split(' ')[0]] = -1
+
     return slownik_alleli
 
 def _parse_MLST_blastn(plik):

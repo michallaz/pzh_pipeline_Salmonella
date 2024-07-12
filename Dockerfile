@@ -309,7 +309,7 @@ RUN curl -fsSL "https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc
     rm "fastqc_v${FASTQC_VERSION}.zip"
 ENV PATH="/opt/docker/FastQC:$PATH"
 
-COPY all_functions_salmonella.py run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py /data/
+COPY all_functions_salmonella.py run_blastn_ver11.sh run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py /data/
 WORKDIR /data
 CMD ["/bin/bash"]
 #ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]

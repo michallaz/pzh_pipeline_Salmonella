@@ -60,6 +60,7 @@ process run_fastqc {
   tag "fastqc for sample ${x}"
   container  = 'salmonella_illumina:2.0'
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
+  maxForks 5
   input:
   tuple val(x), path(reads)
   output:
@@ -87,6 +88,7 @@ process run_fastqc_nanopore {
   tag "fastqc for sample ${x}"
   container  = 'salmonella_illumina:2.0'
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
+  maxForks 5
   input:
   tuple val(x), path(reads)
   output:
@@ -115,6 +117,7 @@ process clean_fastq {
 
   container  = 'salmonella_illumina:2.0'
   tag "Fixing fastq dla sample $x"
+  maxForks 5
   input:
   tuple val(x), path(reads)
   output:
@@ -137,6 +140,7 @@ process spades {
   cpus params.cpus
   container  = 'salmonella_illumina:2.0'
   tag "Spades dla sample $x"
+  maxForks 5
   input:
   tuple val(x), path('R1.fastq.gz'), path('R2.fastq.gz'), path('SE.fastq.gz')
   output:
@@ -163,6 +167,7 @@ process bwa_paired {
   cpus params.cpus
   container  = 'salmonella_illumina:2.0'
   tag "RE-mapowanie PE dla sample $x"
+  maxForks 5
   input:
   tuple val(x), path('genomic_fasta.fasta'),  path(read_1),  path(read_2)
   output:
@@ -180,6 +185,7 @@ process bwa_single {
   cpus params.cpus
   container  = 'salmonella_illumina:2.0'
   tag "RE-mapowanie SE dla sample $x"
+  maxForks 5
   input:
   tuple val(x), path('genomic_fasta.fasta'), path(reads)
   output:
@@ -218,6 +224,7 @@ process _run_pilon {
   // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
   tag "Pilon for sample $x"
   publishDir "pilon_wyniki/${x}", mode: 'copy'
+  maxForks 5
   input:
   tuple val(x), path(bam1), path(bam2), path('genomic_fasta.fasta')
   output:
@@ -255,6 +262,7 @@ process run_pilon {
   container  = 'salmonella_illumina:2.0'
   // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
   tag "Pilon for sample $x"
+  maxForks 5
   // publishDir "pilon_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(bam1), path(bam2), path('genomic_fasta.fasta')
@@ -284,6 +292,7 @@ process run_coverage {
   container  = 'salmonella_illumina:2.0'
   tag "Coverage-based filtering for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  maxForks 5
   input:
   tuple val(x), path(bam1), path('genomic_fasta.fasta')
   output:
@@ -382,6 +391,7 @@ process run_Seqsero {
   tag "Predicting OH for sample $x with Seqsero"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
+  maxForks 5
   input:
   tuple val(x), path(fasta)
   output:
@@ -400,6 +410,7 @@ process run_sistr {
   tag "Predicting OH for sample $x with Sistr"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
+  maxForks 5
   input:
   tuple val(x), path(fasta)
   output:
@@ -470,6 +481,7 @@ process run_cgMLST {
   tag "Predicting cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
+  maxForks 5
   input:
   tuple val(x), path(fasta)
   output: 
@@ -481,7 +493,7 @@ process run_cgMLST {
   // Aha run_blastn_ver6.sh wykorzystuje pod spodem xargs zeby rownolegle puszczac max ${task.cpus} 1-procesowych blastow
   script:
   """
-  /data/run_blastn_ver10.sh $fasta ${task.cpus}
+  /data/run_blastn_ver11.sh $fasta ${task.cpus}
   cat log.log | cut -f1,2 > cgMLST.txt
   """
 }
@@ -585,6 +597,7 @@ process run_prokka {
   tag "Predicting genes for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
+  maxForks 5
   input:
   tuple val(x), path(fasta)
   output:
@@ -604,6 +617,7 @@ process run_VFDB {
   tag "Predicting VirulenceFactors for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
+  maxForks 5
   input:
   // inputem jest output procesu run_prokka
   tuple val(x), path(gff), path(faa), path(ffn), path(tsv)
@@ -627,6 +641,7 @@ process run_spifinder {
   tag "Predicting virulence islands for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
+  maxForks 5
   input:
   tuple val(x), path(fasta)
   output:
@@ -688,7 +703,8 @@ process run_pHierCC {
   // Jeden zawierajacy klastrowanie SINGLE linkage zbudowane na 430k profili z enterobase
   // Drugi zawierajacy klastrowanie COMPLETE linkage zbudowane na 430k profili z enterobae
   // Jesli ST jest nowy NIE obecny w zadnej z baz program nic nie zwraca ?
-  
+  maxRetries 3
+  errorStrategy 'retry' 
   container  = 'salmonella_illumina:2.0'
   containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
   tag "Predicting hierCC levels for sample $x"
@@ -758,24 +774,25 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
 # 1. Szukanie w bazie enterobase
 with open('parsed_phiercc_enterobase.txt', 'a') as f:
     address = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/cgMLST_v2/sts?st_id={matching_ST}&scheme=cgMLST_v2&limit=5"
-    try:
-        response = urlopen(__create_request(address))
-        data = json.load(response)
-        lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850'] # Enterobase 3ma tylko te wartosci
-        lista_poziomow = [data['STs'][0]['info']['hierCC'][x] for x in lista_kluczy] # lista z uporzadkowanymi poziomami
+    #try:
+    response = urlopen(__create_request(address))
+    data = json.load(response)
+    lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850'] # Enterobase 3ma tylko te wartosci
+    lista_poziomow = [data['STs'][0]['info']['hierCC'][x] for x in lista_kluczy] # lista z uporzadkowanymi poziomami
             
-        # modyfikacja wartosci w lista_poziomow na podstawie 
-	# wartsoci z hierCC z odelgoscia mniejsza niz dystans do najblzszego znangeo przedstawiciela z enterobase sa podmieniane na my_ST 
-        try:
-            last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
-            lista_poziomow[:(last_index+1)] = [my_ST] * (last_index + 1)
-        except IndexError:
-            pass
-        formatted_string = "\t".join(list(map(str, lista_poziomow)))
-        #formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2600}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
-        f.write(f'{my_ST}\\t{formatted_string}\\n')
-    except HTTPError as Response_error:
-        print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
+    # modyfikacja wartosci w lista_poziomow na podstawie 
+    # wartsoci z hierCC z odelgoscia mniejsza niz dystans do najblzszego znangeo przedstawiciela z enterobase sa podmieniane na my_ST 
+    try:
+        last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
+        lista_poziomow[:(last_index+1)] = [my_ST] * (last_index + 1)
+    except IndexError:
+        pass
+    formatted_string = "\t".join(list(map(str, lista_poziomow)))
+    #formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2600}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
+    f.write(f'{my_ST}\\t{formatted_string}\\n')
+    # Wywalm exccepta na rzecz maxRetries 
+    #except HTTPError as Response_error:
+    #    print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
 
 # 2. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
 with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_single_linkage.HierCC.gz') as f2:
@@ -886,7 +903,7 @@ for end in range(step,len(orignal_list), step):
     # build url link
     address2 = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/straindata?limit={step}&sortorder=asc&" + ('barcode={}&'*step).format(*list_of_ids) + "offset=0"	
     response2 = urlopen(__create_request(address2))
-    d # zwracamy tylko NAJMNIEJSZY ST z listyata2 = json.load(response2)
+    # zwracamy tylko NAJMNIEJSZY ST z listyata2 = json.load(response2)
     # parse output basically we remove data from strain_info if the do not have required Sequence type
     for klucz in data2['straindata']:
         to_remove = 1
@@ -955,6 +972,7 @@ process run_flye {
   tag "Predicting scaffold with flye for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   cpus params.cpus
+  maxForks 5
   input:
   tuple val(x), path(fastq_gz)
   output:
@@ -993,6 +1011,7 @@ process run_minimap2 {
   tag "Remapping of reads to predicted scaffold for sample $x"
   container  = 'salmonella_illumina:2.0' 
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
+  maxForks 5
   input:
   tuple val(x), path(fasta), path(reads) 
   output:
@@ -1012,6 +1031,7 @@ process run_minimap2_2nd {
   tag "Remapping of reads to predicted scaffold for sample $x"
   container  = 'salmonella_illumina:2.0'
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
+  maxForks 5
   input:
   tuple val(x), path(fasta), path(reads)
   output:
@@ -1034,6 +1054,7 @@ process run_pilon_nanopore {
   // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
   tag "Pilon for sample $x"
   publishDir "pipeline_wyniki/${x}/pilon", mode: 'copy', pattern: 'latest_pilon.*'
+  maxForks 5
   input:
   tuple val(x), path(bam1), path(fasta)
   output:
@@ -1060,6 +1081,7 @@ process run_medaka {
   container  = 'salmonella_illumina:2.0'
   tag "Pilon for sample $x"
   publishDir "pipeline_wyniki/${x}/medaka", mode: 'copy', pattern: 'latest_pilon.*'
+  maxForks 5
   input:
   tuple val(x), path(bam1), path(fasta)
   output:
