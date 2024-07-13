@@ -727,6 +727,11 @@ import json
 import gzip
 import re
 import numpy as np
+import time
+
+# rzadkich przypadkach gdyby bylo na raz za duzo requestow
+# Enterobase zwraca blad wiec zrandomizujmy moment wejscia
+time.sleep(np.random.randint(2,20))
 
 API_TOKEN = "${params.enterobase_api_token}"
 
@@ -795,8 +800,24 @@ with open('parsed_phiercc_enterobase.txt', 'a') as f:
     #    print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
 
 # 2. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
-with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_single_linkage.HierCC.gz') as f2:
-    # wynikow szukamy w f2, a zapisujemy do f
+with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_single_linkage.HierCC.gz') as f2, open('/cgMLST2_entero/profile_single_linkage.HierCC.index') as f3:
+
+    # wstepne szukanie w f3, wynikow szukamy w f2, a zapisujemy do f
+    pointer = 0
+    for line in f3:
+        line = line.rsplit()
+        try:
+            if int(matching_ST) > int(line[0]):
+                break
+            else:
+                pointer = int(line[1])
+
+        except ValueError:
+            pass
+            # pierwszy wiersz w indekszie to naglowek
+    # ustaw kursow blizej lokalziacji przed szukanym ST
+    f2.seek(pointer)
+	
     for line in f2:
         line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
         if line[0] == matching_ST:
@@ -814,7 +835,24 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgM
             break
 
 # 3. Szukanie pHierCC w wynikach 
-with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_complete_linkage.HierCC.gz') as f2:
+with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_complete_linkage.HierCC.gz') as f2, open('/cgMLST2_entero/profile_complete_linkage.HierCC.index') as f3:
+
+    # wstepne szukanie w f3, wynikow szukamy w f2, a zapisujemy do f
+    pointer = 0
+    for line in f3:
+        line = line.rsplit()
+        try:
+            if int(matching_ST) > int(line[0]):
+                break
+            else:
+                pointer = int(line[1])
+
+        except ValueError:
+            pass
+            # pierwszy wiersz w indekszie to naglowek
+    # ustaw kursow blizej lokalziacji przed szukanym ST
+    f2.seek(pointer)
+
     for line in f2:
         line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
         if line[0] == matching_ST:
