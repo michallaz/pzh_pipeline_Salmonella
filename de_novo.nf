@@ -807,7 +807,7 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgM
     for line in f3:
         line = line.rsplit()
         try:
-            if int(matching_ST) > int(line[0]):
+            if int(matching_ST) < int(line[0]):
                 break
             else:
                 pointer = int(line[1])
@@ -842,7 +842,7 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/cgM
     for line in f3:
         line = line.rsplit()
         try:
-            if int(matching_ST) > int(line[0]):
+            if int(matching_ST) < int(line[0]):
                 break
             else:
                 pointer = int(line[1])
