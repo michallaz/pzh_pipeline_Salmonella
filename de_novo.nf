@@ -16,7 +16,7 @@ params.quality_initial = 5 // Parametr stosowany aktualnie tylko przez krakena
 params.Achtman7GeneMLST_db_absolute_path_on_host = "/home/michall/git/pzh_pipeline_Salmonella/Achtman7GeneMLST_entero" //ponownie na sztywno do poprawy docelowo 
 params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/cgMLST_30042024" // sciezka do alleli z cgMLST + informacja o profilacj hierCC
 params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwIjoxNzM2MjA0NDExfQ.eyJfIjoibUsyNFlZSHd4SyIsInVzZXJuYW1lIjoiTWljaGFsX0xhem5pZXdza2kiLCJpZCI6ODg4MCwiYWRtaW5pc3RyYXRvciI6bnVsbCwiZW1haWwiOiJtbGF6bmlld3NraUBwemguZ292LnBsIiwiYXBpX2FjY2Vzc19jbG9zdHJpZGl1bSI6IlRydWUiLCJhcGlfYWNjZXNzX2Vjb2xpIjoiVHJ1ZSIsImFwaV9hY2Nlc3Nfc2VudGVyaWNhIjoiVHJ1ZSJ9.VEsyVPv8sn1zG7d3uFqEjfk6XFS2qP8P5Y5mh9VPE9w" // klucz api nadawany przez ENTEROBASE po rejestracji na stronie + wystapieniu o klucz 
-
+params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Enterobase"
 
 // Kontenery uzywane w tym skrypcie 
 // salmonella_illumina:2.0 - bazowy kontener z programami o kodem
@@ -879,88 +879,65 @@ process extract_historical_data {
   // tabela straindata zawierajaca informacje o ST nie zawiera informacji o phierCC 
   container  = 'salmonella_illumina:2.0'
   tag "Extracting historical data for sample $x"
-  publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
+  containerOptions "--volume ${params.Enterobase_db_absolute_path_on_host}:/Enterobase"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
-  tuple val(x), path('parsed_cgMLST.txt')
+  tuple val(x), path('parsed_phiercc_enterobase.txt'), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt')
   output:
   tuple val(x), path('enterobase_historical_data.txt')
   script:
 """
 #!/usr/bin/python
-
-import  sys
-from urllib.request import urlopen
-from urllib.error import HTTPError
-import urllib
-import base64
-import json
-
-
-API_TOKEN = "${params.enterobase_api_token}"
-
-def __create_request(request_str):
-    base64string = base64.b64encode('{0}: '.format(API_TOKEN).encode('utf-8'))
-    headers = {"Authorization": "Basic {0}".format(base64string.decode())}
-    request = urllib.request.Request(request_str, None, headers)
-    return request
-
-def getST(my_file):
-    # prosta funkcja zwraca wszystkie numery ST z odlegloscia 0 (patrz funkcja parse_cgMLST)
-    my_ST = []
+import numpy as np
+def get_hiercc_level(my_file):
     with open(my_file) as f:
+        i = 0
         for line in f:
-            line = line.rsplit()
-            if int(line[1]) == 0:
-                my_ST.append(line[0])
-    return my_ST
+            if i == 0:
+                klucze = line.rsplit()
+            elif i == 1:
+                wartosci = line.rsplit()
+            i+=1
+    slownik = {x:y for x,y in zip(klucze,wartosci)}
+    return slownik
+# Tutaj mamy informacje o poziomach mojej probki
+slownik_hiercc = get_hiercc_level('parsed_phiercc_enterobase.txt')
 
-my_ST = getST('parsed_cgMLST.txt')
+# Szukamy strainow o takim wspolnym poziomie, to powinno byc user defined
+phiercc_level_userdefined = '5'
 
 
-# downloading entrire strain table 
-address = 'https://enterobase.warwick.ac.uk/api/v2.0/senterica/strains?my_strains=false&sortorder=asc&return_all=true&offset=0'
-response = urlopen(__create_request(address))
-data = json.load(response)
+common_STs = slownik_hiercc[f'HC{phiercc_level_userdefined}']
 
-# in dict - keys - strain name; values - 2- element list with countr and collection year 
-strain_info= {}
-for strain in data['Strains']:
-    strain_info[strain['strain_barcode']] = []
-    strain_info[strain['strain_barcode']].append(strain['country'])
-    strain_info[strain['strain_barcode']].append(strain['collection_year'])
+# teraz lecimy po tablicy STs i szukamy ST z pozioem jak common_STs na poziomie phiercc_level_userdefined
 
-# querying "strain" table in f'{step}'-sized chunks 
-# 150 seems to be optimal number , larger quieries are rejected
-start = 0
-step = 150
-orignal_list = list(strain_info.keys())
-for end in range(step,len(orignal_list), step):
-    # create chunls
-    #print(end) # for tests
-    list_of_ids = orignal_list[start:end] # extract barcodes in chunks
-    # build url link
-    address2 = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/straindata?limit={step}&sortorder=asc&" + ('barcode={}&'*step).format(*list_of_ids) + "offset=0"	
-    response2 = urlopen(__create_request(address2))
-    # zwracamy tylko NAJMNIEJSZY ST z listyata2 = json.load(response2)
-    # parse output basically we remove data from strain_info if the do not have required Sequence type
-    for klucz in data2['straindata']:
-        to_remove = 1
-        for scheme in data2['straindata'][klucz]['sts']:
-            if 'cgMLST_v2' in scheme.values() and scheme['st_id'] == my_ST:
-                strain_info[klucz].append(scheme['st_id'])
-                to_remove = 0
-        if to_remove:
-            try:
-                del(strain_info[klucz])
-            except:
-                print(f'No such key {klucz}')
-    start = end
+expected_ST = {}
+STs = np.load('/Enterobase/sts_table.npy', allow_pickle=True)
+STs = STs.item()
 
-# na tym etapie strain_info powinno zawierac tylko recody z naszym ST
+for klucz,wartosc in STs.items(): 
+    if wartosc[f'd{phiercc_level_userdefined}'] == common_STs:
+        expected_ST[klucz] = ''
+    		
+
+# na tym etapie znamy STs ktore na poziomie phiercc_level_userdefined maja wartosc common_STs
+# te STs sa znane w tablicy straindata
+
+straindata = np.load('/Enterobase/straindata_table.npy',  allow_pickle=True)
+straindata = straindata.item()
+
+# niestety lecimy po wszystkich elementach w straindata
+dane_historyczne = {} # kluczem jest nazwa szczepu , wartoscia 2 elementowa lista z krajem i rokiem
+for strain, wartosc in straindata.items():
+    for scheme in wartosc['sts']:
+        if 'cgMLST_v2' in scheme.values() and str(scheme['st_id']) in expected_ST.keys():
+            dane_historyczne[strain] = [wartosc['country'], wartosc['collection_year'], scheme['st_id']]  
+
+# zapisujemy dane
 with open('enterobase_historical_data.txt', 'w') as f:
-    f.write(f'Country\\tYear\\tST\\n'
-    for klucz,wartosc in strain_info.items():
-        f.write(f'{wartosc[0]}\\t{wartosc[1]}\\t{wartosc[2]}\\n'
+    f.write(f'Strain_id\\tCountry\\tYear\\tST\\n')
+    for klucz, wartosc in dane_historyczne.items(): 
+        f.write(f'{klucz}\\t{wartosc[0]}\\t{wartosc[1]}\\t{wartosc[2]}\\n')
 """
 }
 
@@ -1409,8 +1386,8 @@ run_pointfinder(final_assembly)
 run_plasmidfinder(final_assembly)
 cgMLST_out = run_cgMLST(final_assembly)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
-run_pHierCC(parse_cgMLST_out)
-// extract_historical_data(parse_cgMLST_out) // NIE WYKONYWAC POKI CO POKI ENTEROBASE NIE POTWIERDZI ZE TAK MOZNA
+run_pHierCC_out = run_pHierCC(parse_cgMLST_out)
+extract_historical_data(run_pHierCC_out) 
 prokka_out = run_prokka(final_assembly)
 run_VFDB(prokka_out)
 run_spifinder(final_assembly)
