@@ -129,6 +129,15 @@ process clean_fastq {
   read_2 = reads[1]
   """
   python /opt/docker/EToKi/EToKi.py prepare --pe ${read_1},${read_2} -p prep_out -c ${params.cpus}
+    # w niektorych przypadkach plik SE moze nic nie zawierac wtedy Etoki sie gubi i ie generuje poprawnie pliku SE
+  # tworzymy samodzilenie plik z dummy sekwencja tak by reszta skryptu dzialala
+  if [ -e prep_out.1.0.s.fastq.gz ]; then
+      echo "@0_SE_0" >> prep_out_L1_SE.fastq
+      echo "GTACTGACCAAACTGGTCGTGTAGCGTTTCATGCCACATCGTATTTTCGGCCATTGGCTGATACCTCCATTGTTAACACCCGTAAAAAAAGGGCGCAACATCATAGCTAACAATGACCGTGGATGCACGGTCATTATTTCAGCAATAGGAT" >> prep_out_L1_SE.fastq
+      echo "+" >> prep_out_L1_SE.fastq
+      echo "AFFFFFFFFFFFFAFFFFFFFFAFFFAFFF/FAFFAAAFF/=FFAAFFAFFFF/FFFFFF//FFFFFFFFA/FFFFFAFFAA=FFFFFFFF/FFFFFFFFF/FFF/FFFFFFFFAFFFAFFFFFAFAF/FF=FFFFAFFFFF/FF/FAFAF" >> prep_out_L1_SE.fastq
+      gzip prep_out_L1_SE.fastq
+  fi
   """
 }
 
