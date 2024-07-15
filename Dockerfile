@@ -171,24 +171,26 @@ RUN chmod a+x spifinder/spifinder.py
 ## dodanie spifindera do PATH
 RUN echo 'export PATH="/opt/docker/spifinder:$PATH"' >> ~/.bashrc
 # Hiercc
-RUN pip install pHierCC
+## INACZEJ UZYWAMY PHIERCC WIEC JEST TO ZBEDNE 
+# RUN pip install pHierCC
 
 ## modyfikacja pHierCC w celu szybkiego doliczania profili
 ## skrypty poki co w tym samym katalogu co dockerfile
 ##  uwaga przy zmienionej dystrybucji python moze byc problem z ustaleniem gdzie pip unstaluje hierCC, wiec ustawile na sztywno sciaganie python 3.8
 
-RUN mkdir -p /opt/docker/pHierCC_tmp
-WORKDIR /opt/docker/pHierCC_tmp
-COPY getDistance.py pHierCC.py  /opt/docker/pHierCC_tmp/
-RUN cp pHierCC.py /usr/local/lib/python3.8/dist-packages/pHierCC/pHierCC.py
-RUN cp getDistance.py /usr/local/lib/python3.8/dist-packages/pHierCC/getDistance.py
+# RUN mkdir -p /opt/docker/pHierCC_tmp
+# WORKDIR /opt/docker/pHierCC_tmp
+# COPY getDistance.py pHierCC.py  /opt/docker/pHierCC_tmp/
+# RUN cp pHierCC.py /usr/local/lib/python3.8/dist-packages/pHierCC/pHierCC.py
+# RUN cp getDistance.py /usr/local/lib/python3.8/dist-packages/pHierCC/getDistance.py
 
 ### budowanie profilu na podstawie cgMLST 
 ### UWAGA na razie pHierCC nie dziala dla wiecej niz 100k profili (teraz w entero jest ponad 300k), dla testow puszczam 2 wersje 
 ### w celu weryfikacji odtwarzania kodu po przepisaniu go na dask-a (jesli sie uda)
 
 ### NIE ROBIMY DBAZA JEST ZA DUZA 
-WORKDIR /cgMLST2_entero
+## BAZA BEDZIE SCIAGANA NA ZEWNATRZ
+# WORKDIR /cgMLST2_entero
 # RUN head -70000 profiles.list >> profiles_70k.list
 # RUN head -20 profiles.list >> profiles_20.list
 # RUN pHierCC -p profiles_70k.list -o profile_output_70k -n 30
@@ -211,14 +213,11 @@ WORKDIR /cgMLST2_entero
 
 # cgMLST z CGE ? wtedy musimy zainstalowac prodigal github czy apt ? budowanie z githuba zadzialalo bez problemu
 WORKDIR /opt/docker
-RUN git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder.git
-RUN git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git
-RUN git clone https://github.com/hyattpd/Prodigal.git
+RUN git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder.git; git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git; git clone https://github.com/hyattpd/Prodigal.git
 
 # budowanie bazy dla cgmlstfindera w oparciu o najnowsze pliki z enterobase
 WORKDIR /opt/docker/cgmlstfinder_db/scripts
-RUN mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_db
-RUN mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_out
+RUN mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_db; mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_out
 
 # Tego NIE ROBIMY POKI CO BO ZZERA 80GB
 # RUN python3 cgmlst_dl.py -o /opt/docker/cgmlstfinder_db/scripts/custom_out -db /opt/docker/cgmlstfinder_db/scripts/custom_db  -k /opt/docker/kma/kma_index
@@ -229,8 +228,7 @@ RUN mkdir -p /opt/docker/cgmlstfinder_db/scripts/custom_out
 
 # instalcja prodigal
 WORKDIR /opt/docker/Prodigal
-RUN make install
-RUN echo 'export PATH="/opt/docker/cgmlstfinder:$PATH"' >> ~/.bashrc
+RUN make install; echo 'export PATH="/opt/docker/cgmlstfinder:$PATH"' >> ~/.bashrc
 
 WORKDIR /data
 # COPY all_functions_salmonella.py run_blastn_ver6.sh  run_blastn_ver7.sh master_script_kontener.sh prep_hierCC.py /data/
@@ -252,8 +250,7 @@ ENV PATH $PATH:/opt/docker/EToKi/externals/
 # Etoki ma wlasnego blasta ale sciagamy nowa werszje
 # 
 RUN wget https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.15.0/ncbi-blast-2.15.0+-x64-linux.tar.gz
-RUN mkdir -p /blast
-RUN tar -zxf ncbi-blast-2.15.0+-x64-linux.tar.gz -C /blast --strip-components=1
+RUN mkdir -p /blast; tar -zxf ncbi-blast-2.15.0+-x64-linux.tar.gz -C /blast --strip-components=1
 # moj skrypt run_blast explicite bedzie puszczal blasta z /blast/bin wiec nie ma potrzeby dodawania do PATH
 # poza tym nie wiem jak inne kompnenty zareaguja na 2 wersje blasta sciagana przeze mnie i ta z Etoki/externals
 # btw na pewno podczas instalacji etoki mozna wskazac gdzie jest blast wiec 
@@ -272,14 +269,15 @@ WORKDIR /data
 COPY coverage_filter.py calculate_stats.py run_VFDB.sh /opt/docker/EToKi/externals
 
 ## DO INSTALACJI CANU POTRZEBA DOINSTALOWAC apt install pkgconf
+## Nie uzywamy canu
 ## Nanopolish odrzucamy
 
-WORKDIR /data
-RUN git clone https://github.com/marbl/canu.git
+# WORKDIR /data
+# RUN git clone https://github.com/marbl/canu.git
 ## RUN git clone --recursive https://github.com/jts/nanopolish.git
 
-WORKDIR /data/canu/src
-RUN make -j 20
+# WORKDIR /data/canu/src
+# RUN make -j 20
 ## WORKDIR /data/nanopolish
 ## RUN pip install -r /data/nanopolish/scripts/requirements.txt
 ## Nanopolish ma specjalnie bez opcji -j bo potrafi sie nie budowac obraz przy wielu procesorach
@@ -294,9 +292,7 @@ RUN apt install python3-venv libncurses5-dev -y
 #RUN pip install tensorrt
 #ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib/python3.8/dist-packages/tensorrt_libs"
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash
-RUN apt install git-lfs
-RUN git lfs install
-RUN git clone https://github.com/nanoporetech/medaka.git
+RUN apt install git-lfs; git lfs install; git clone https://github.com/nanoporetech/medaka.git
 WORKDIR /opt/docker/medaka
 # RUN sed -i 's/tensorflow~=2.10.0/tensorflow==2.12.0/' requirements.txt
 RUN make install_root
@@ -308,6 +304,19 @@ RUN curl -fsSL "https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc
     unzip "fastqc_v${FASTQC_VERSION}.zip" && \
     rm "fastqc_v${FASTQC_VERSION}.zip"
 ENV PATH="/opt/docker/FastQC:$PATH"
+
+# AMRFIDER
+## HAMMER
+WORKDIR /opt/docker
+RUN wget http://eddylab.org/software/hmmer/hmmer-3.3.2.tar.gz; tar -zxf hmmer-3.3.2.tar.gz
+WORKDIR /opt/docker/hmmer-3.3.2
+RUN ./configure; make; make install
+ 
+## AMRFIDER
+WORKDIR /opt/docker
+RUN git clone https://github.com/ncbi/amr.git
+WORKDIR /opt/docker/amr
+RUN make; make install 
 
 COPY all_functions_salmonella.py run_blastn_ver11.sh run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py /data/
 WORKDIR /data

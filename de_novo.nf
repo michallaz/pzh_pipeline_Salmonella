@@ -17,11 +17,11 @@ params.Achtman7GeneMLST_db_absolute_path_on_host = "/home/michall/git/pzh_pipeli
 params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/cgMLST_30042024" // sciezka do alleli z cgMLST + informacja o profilacj hierCC
 params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwIjoxNzM2MjA0NDExfQ.eyJfIjoibUsyNFlZSHd4SyIsInVzZXJuYW1lIjoiTWljaGFsX0xhem5pZXdza2kiLCJpZCI6ODg4MCwiYWRtaW5pc3RyYXRvciI6bnVsbCwiZW1haWwiOiJtbGF6bmlld3NraUBwemguZ292LnBsIiwiYXBpX2FjY2Vzc19jbG9zdHJpZGl1bSI6IlRydWUiLCJhcGlfYWNjZXNzX2Vjb2xpIjoiVHJ1ZSIsImFwaV9hY2Nlc3Nfc2VudGVyaWNhIjoiVHJ1ZSJ9.VEsyVPv8sn1zG7d3uFqEjfk6XFS2qP8P5Y5mh9VPE9w" // klucz api nadawany przez ENTEROBASE po rejestracji na stronie + wystapieniu o klucz 
 params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Enterobase"
+params.AMRFINDER_db_absolute_path_on_host = "/mnt/sda1/michall/db/AMRfider_plus"
 
 // Kontenery uzywane w tym skrypcie 
 // salmonella_illumina:2.0 - bazowy kontener z programami o kodem
 // staphb/prokka:latest - kontener z prokka, w notatkach mam ze budowanie programu od 0 jest meczace bo to kod sprzed ponad 4 lat 
-// infl_nanopore_eqa:2.18 - tu jest medaka
 
 
 
@@ -941,6 +941,33 @@ with open('enterobase_historical_data.txt', 'w') as f:
 """
 }
 
+process run_amrfinder {
+  container  = 'salmonella_illumina:2.0'
+  tag "Predicting microbial resistance with AMRfinder for sample $x"
+  publishDir "pipeline_wyniki/${x}/AMRplus_fider", mode: 'copy', pattern: "AMRfinder*"
+  containerOptions "--volume ${params.AMRFINDER_db_absolute_path_on_host}:/AMRfider"
+  input:
+  tuple val(x), path(fasta)
+  output:
+  tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt')
+  // -n input, plik z sekwencja nukleotydowa
+  // -d input, sciezka do bazy AMRfindera 
+  // -i input, seq identity miedzy targetem a query
+  // -c input, query coverage z blasta
+  // -O input, nazwa organizmu 
+  // -o outpu, nazwa pliku z outputem
+  // --plus input, Add the plus genes to the report
+  // The 'plus' subset include a less-selective set of genes of interest including genes involved in virulence, biocide, heat, metal, and acid resistance
+  // --blast_bin input sciezka do binarek blast-a, podaje wxplicite po w kontenerze sa 2 binarki blasta te z etoki i instalowane recznie
+  // Te z etoki sa za stare 
+  script:
+  """ 
+  amrfinder --blast_bin /blast/bin -n $fasta -d /AMRfider  -i 0.9 -c 0.5 -o initial_output.txt -O Salmonella --plus
+  cat initial_output.txt | grep -w AMR >> AMRfinder_resistance.txt
+  cat initial_output.txt | grep -w VIRULENCE >> AMRfinder_virulence.txt
+
+  """ 
+}
 
 //process build_model {
   // Ogolny proces do budowania modelu
@@ -1383,6 +1410,7 @@ parse_7MLST(MLST_out)
 run_Seqsero(final_assembly)
 run_sistr(final_assembly)
 run_pointfinder(final_assembly)
+run_amrfinder(final_assembly)
 run_plasmidfinder(final_assembly)
 cgMLST_out = run_cgMLST(final_assembly)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
