@@ -18,6 +18,9 @@ params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/cgMLST_30042024" 
 params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwIjoxNzM2MjA0NDExfQ.eyJfIjoibUsyNFlZSHd4SyIsInVzZXJuYW1lIjoiTWljaGFsX0xhem5pZXdza2kiLCJpZCI6ODg4MCwiYWRtaW5pc3RyYXRvciI6bnVsbCwiZW1haWwiOiJtbGF6bmlld3NraUBwemguZ292LnBsIiwiYXBpX2FjY2Vzc19jbG9zdHJpZGl1bSI6IlRydWUiLCJhcGlfYWNjZXNzX2Vjb2xpIjoiVHJ1ZSIsImFwaV9hY2Nlc3Nfc2VudGVyaWNhIjoiVHJ1ZSJ9.VEsyVPv8sn1zG7d3uFqEjfk6XFS2qP8P5Y5mh9VPE9w" // klucz api nadawany przez ENTEROBASE po rejestracji na stronie + wystapieniu o klucz 
 params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Enterobase"
 params.AMRFINDER_db_absolute_path_on_host = "/mnt/sda1/michall/db/AMRfider_plus"
+params.metaphlan_db_absolute_path_on_host = "/mnt/sda1/michall/db/Metaphlan"
+params.kmerfinder_db_absolute_path_on_host = "/mnt/sda1/michall/db/Kmerfinder/kmerfinder_db"
+
 
 // Kontenery uzywane w tym skrypcie 
 // salmonella_illumina:2.0 - bazowy kontener z programami o kodem
@@ -705,6 +708,53 @@ process run_kraken2_illumina {
   """
 }
 
+process run_metaphlan_illumina {
+  // modul wziety z pipeline do SARS
+  // poprawilem tylko pare rzeczy zwiazane z parametrami i kontenerami ktore u mnie sa inne
+  // kraken2 instalowany jest przez ETOKI i jest w path kontenera do salmonelli
+  tag "kraken2:${x}"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}/metaphlan", mode: 'copy', pattern: "report_metaphlan*"
+  containerOptions "--volume ${params.metaphlan_db_absolute_path_on_host}:/bowtie_db"
+  maxForks 5
+  cpus params.cpus
+  input:
+  tuple val(x), path(reads)
+
+  output:
+  tuple val(x), path('report_metaphlan_SGB.txt'), path('report_metaphlan_species.txt'), path('report_metaphlan_genra.txt')
+
+  script:
+  """
+  metaphlan ${reads[0]},${reads[1]} --bowtie2out metagenome.bowtie2.bz2 --nproc ${task.cpus} --input_type fastq -o profiled_metagenome.txt --bowtie2db /bowtie_db/ --unclassified_estimation
+  # Parsujemy wyniki
+  metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /bowtie_db/  --nproc ${task.cpus} --tax_lev 't' -o report_metaphlan_SGB.txt
+  metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /bowtie_db/  --nproc ${task.cpus} --tax_lev 's' -o report_metaphlan_species.txt
+  metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /bowtie_db/  --nproc ${task.cpus} --tax_lev 'g' -o report_metaphlan_genra.txt
+  """
+}
+
+process run_kmerfinder {
+  tag "kmerfinder:${x}"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results*"
+  containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
+  maxForks 5
+  cpus params.cpus
+  input:
+  tuple val(x), path(reads)
+
+  output:
+  tuple val(x),path('results.spa'), path('results.txt')
+
+  script:
+  """
+  /opt/docker/kmerfinder/kmerfinder.py -i ${reads[0]} ${reads[1]} -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+  cp kmerfider_out/results.spa .
+  cp kmerfider_out/results.txt .
+  """
+}
+
 process run_pHierCC {
   
   // Funkcja odpytuje API Enterobase w celu wyciagniecia profuili z tej bazu
@@ -1363,6 +1413,12 @@ run_fastqc(initial_fastq)
 
 // kraken2 analiza kontmainacji innymi organizmami
 run_kraken2_illumina(initial_fastq)
+
+// Metaphlan
+run_metaphlan_illumina(initial_fastq)
+
+//Kmerfinder
+run_kmerfinder(initial_fastq)
 
 // Czyszczenie fastq jak w etoki
 processed_fastq = clean_fastq(initial_fastq)

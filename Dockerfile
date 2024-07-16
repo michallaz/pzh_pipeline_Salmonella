@@ -125,31 +125,30 @@ RUN cd kma && make
 ## bazy
 ### Pointfinder
 WORKDIR /opt/docker
-RUN git clone https://bitbucket.org/genomicepidemiology/pointfinder_db/
+RUN git clone https://bitbucket.org/genomicepidemiology/pointfinder_db/; git clone https://bitbucket.org/genomicepidemiology/disinfinder_db/; git clone https://bitbucket.org/genomicepidemiology/resfinder_db.git;  git clone https://bitbucket.org/genomicepidemiology/plasmidfinder_db.git; git clone https://bitbucket.org/genomicepidemiology/plasmidfinder.git; git clone https://bitbucket.org/genomicepidemiology/kmerfinder.git
+ 
 WORKDIR /opt/docker/pointfinder_db
 RUN ls -lrt
 RUN python3 INSTALL.py /opt/docker/kma/kma_index non_interactive
 WORKDIR /opt/docker
 
 ### disinfinde
-RUN git clone https://bitbucket.org/genomicepidemiology/disinfinder_db/
 WORKDIR /opt/docker/disinfinder_db
 RUN python3 INSTALL.py /opt/docker/kma/kma_index non_interactive
 WORKDIR /opt/docker
 ### Resfinder
 
-RUN git clone https://bitbucket.org/genomicepidemiology/resfinder_db.git
 WORKDIR /opt/docker/resfinder_db
 RUN python3 INSTALL.py /opt/docker/kma/kma_index non_interactive
 WORKDIR /opt/docker
 
 ### Plasmidfinder
-RUN git clone https://bitbucket.org/genomicepidemiology/plasmidfinder_db.git
-RUN git clone https://bitbucket.org/genomicepidemiology/plasmidfinder.git
 WORKDIR /opt/docker/plasmidfinder_db
 RUN python INSTALL.py /opt/docker/kma/kma_index non_interactive
 WORKDIR /opt/docker
 
+### Kmerfinder
+#### Duza baza instalowana lokalnie w /db
 
 ### Wyspy wirulencji
 RUN git clone https://bitbucket.org/genomicepidemiology/spifinder_db.git
@@ -212,8 +211,12 @@ RUN echo 'export PATH="/opt/docker/spifinder:$PATH"' >> ~/.bashrc
 
 
 # cgMLST z CGE ? wtedy musimy zainstalowac prodigal github czy apt ? budowanie z githuba zadzialalo bez problemu
+## Dodalem metaphlana 
 WORKDIR /opt/docker
-RUN git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder.git; git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git; git clone https://github.com/hyattpd/Prodigal.git
+RUN git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder.git; git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git; git clone https://github.com/hyattpd/Prodigal.git;  git clone https://github.com/biobakery/MetaPhlAn.git
+
+WORKDIR /opt/docker/MetaPhlAn
+RUN pip install .
 
 # budowanie bazy dla cgmlstfindera w oparciu o najnowsze pliki z enterobase
 WORKDIR /opt/docker/cgmlstfinder_db/scripts
