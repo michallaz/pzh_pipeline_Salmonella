@@ -42,7 +42,9 @@ run_blastn () {
 }
 
 export -f run_blastn
-cat /cgMLST2_entero/all_3002_allele.txt | xargs -I {} --max-procs=${MAX_PROC} bash -c "run_blastn {} ${GENOM}"
+
+ls /cgMLST2_entero/*fasta | xargs -I {} basename {} | cut -d "." -f1 >> tmp.txt
+cat tmp.txt | xargs -I {} --max-procs=${MAX_PROC} bash -c "run_blastn {} ${GENOM}"
 
 PREVIOUS_POS="-1"
 PREVIOUS_CONTIG="NONE"
@@ -52,7 +54,7 @@ CONTIG_DIR="plus"
 # jesli contig jest minus kolejne allele z cg musza byc minus oraz musza byc PRZED poprzednim allelem
 
 
-for K in `cat /cgMLST2_entero/all_3002_allele.txt`
+for K in `cat tmp.txt`
 do
 	#if [ ${K} == "STMMW_00931" ]; then
 	#	exit 1

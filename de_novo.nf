@@ -11,16 +11,22 @@ params.reads = '/mnt/sda1/michall/Salmonella/*_R{1,2}_001.fastq.gz'
 // to wchozi sciezka nanoporowe'a
 params.machine = 'Illumina'
 
-params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/" // na sztywno bo nie chce mi sie tego ustawiac za kazdym razem
 params.quality_initial = 5 // Parametr stosowany aktualnie tylko przez krakena
-params.Achtman7GeneMLST_db_absolute_path_on_host = "/home/michall/git/pzh_pipeline_Salmonella/Achtman7GeneMLST_entero" //ponownie na sztywno do poprawy docelowo 
-params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/cgMLST_30042024" // sciezka do alleli z cgMLST + informacja o profilacj hierCC
+
+// bazy specyficzne dla organizmu
+params.Achtman7GeneMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/MLST_Achtman" //ponownie na sztywno do poprawy docelowo 
+params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/cgMLST_v2" // sciezka do alleli z cgMLST + informacja o profilacj hierCC
+params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/pHierCC_local"
+params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/Enterobase"
+
+// TOKEN
 params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwIjoxNzM2MjA0NDExfQ.eyJfIjoibUsyNFlZSHd4SyIsInVzZXJuYW1lIjoiTWljaGFsX0xhem5pZXdza2kiLCJpZCI6ODg4MCwiYWRtaW5pc3RyYXRvciI6bnVsbCwiZW1haWwiOiJtbGF6bmlld3NraUBwemguZ292LnBsIiwiYXBpX2FjY2Vzc19jbG9zdHJpZGl1bSI6IlRydWUiLCJhcGlfYWNjZXNzX2Vjb2xpIjoiVHJ1ZSIsImFwaV9hY2Nlc3Nfc2VudGVyaWNhIjoiVHJ1ZSJ9.VEsyVPv8sn1zG7d3uFqEjfk6XFS2qP8P5Y5mh9VPE9w" // klucz api nadawany przez ENTEROBASE po rejestracji na stronie + wystapieniu o klucz 
-params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Enterobase"
+
+// bazy ogolne
 params.AMRFINDER_db_absolute_path_on_host = "/mnt/sda1/michall/db/AMRfider_plus"
 params.metaphlan_db_absolute_path_on_host = "/mnt/sda1/michall/db/Metaphlan"
 params.kmerfinder_db_absolute_path_on_host = "/mnt/sda1/michall/db/Kmerfinder/kmerfinder_db"
-
+params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/" 
 
 // Kontenery uzywane w tym skrypcie 
 // salmonella_illumina:2.0 - bazowy kontener z programami o kodem
@@ -348,7 +354,8 @@ process run_7MLST {
   tuple val(x), path('MLSTout.txt')
   script:
   """
-  /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r /Achtman7GeneMLST_entero/references.fasta -k ${x} -o MLSTout.txt -d /Achtman7GeneMLST_entero/MLST_database.tab
+  /opt/docker/EToKi/EToKi.py MLSTdb -i /Achtman7GeneMLST_entero/all_allels.fasta -x 0.8 -m 0.5 -r /Achtman7GeneMLST_entero/MLST_Achtman_ref.fasta -d MLST_database.tab
+  /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r /Achtman7GeneMLST_entero/MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
   """
 }
 
@@ -381,10 +388,10 @@ from all_functions_salmonella import *
 # zostawiamy wczytanie profili dla 7 genomwego bo jest szybkie i pozwala ladnie parsowac wynik
 # nie jest jednak potrzebne dla samego szukania pasujacego ST dla zidentyfikowanego zestawu alleli w probce 
 
-known_profiles, klucze = create_profile('/Achtman7GeneMLST_entero/MLST_profiles.txt')
+known_profiles, klucze = create_profile('/Achtman7GeneMLST_entero/profiles.list')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
 matching_profile, min_value, _, _ = getST(MLSTout = identified_profile, \
-                                       profile_file = '/Achtman7GeneMLST_entero/MLST_profiles.txt')
+                                       profile_file = '/Achtman7GeneMLST_entero/profiles.list')
 
   
 # We only print one ST, one with the lowest possible ID and lowest identified distance
@@ -516,7 +523,7 @@ process parse_cgMLST {
   // local_cyfra (jesli ST jest nieznany bazie enterobase)
   // druga kolumna w tym pliku to albo 0 (dany ST zostal znaleziony w bazie) albo NOVEL jesli w bazie entero ani local nie ma takiego sample'a 
   container  = 'salmonella_illumina:2.0'
-  containerOptions '--volume /mnt/sda1/michall/db/cgMLST_30042024:/cgMLST2_entero'
+  containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
   tag "Parsing cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'parsed_cgMLST.txt'
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'matching_allel_list.txt'
@@ -765,7 +772,8 @@ process run_pHierCC {
   maxRetries 3
   errorStrategy 'retry' 
   container  = 'salmonella_illumina:2.0'
-  containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
+  // containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
+  containerOptions "--volume ${params.phiercc_db_absolute_path_on_host}:/pHierCC_local"
   tag "Predicting hierCC levels for sample $x"
   publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
   input:
@@ -859,7 +867,7 @@ with open('parsed_phiercc_enterobase.txt', 'a') as f:
     #    print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
 
 # 2. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
-with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_single_linkage.HierCC.gz') as f2, open('/cgMLST2_entero/profile_single_linkage.HierCC.index') as f3:
+with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/pHierCC_local/profile_single_linkage.HierCC.gz') as f2, open('/pHierCC_local/profile_single_linkage.HierCC.index') as f3:
 
     # wstepne szukanie w f3, wynikow szukamy w f2, a zapisujemy do f
     pointer = 0
@@ -894,7 +902,7 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/cgM
             break
 
 # 3. Szukanie pHierCC w wynikach 
-with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/cgMLST2_entero/profile_complete_linkage.HierCC.gz') as f2, open('/cgMLST2_entero/profile_complete_linkage.HierCC.index') as f3:
+with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/pHierCC_local/profile_complete_linkage.HierCC.gz') as f2, open('/pHierCC_local/profile_complete_linkage.HierCC.index') as f3:
 
     # wstepne szukanie w f3, wynikow szukamy w f2, a zapisujemy do f
     pointer = 0
