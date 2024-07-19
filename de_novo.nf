@@ -4,20 +4,34 @@ params.min_coverage_ratio = 0.1
 // my nie jestesmy tak ostrzy dajemy 0.1 co tlumaczymy uzyciem innego alignera
 // params.min_coverage_ratio_nanopore = 0.1 // Ten parametr nie jest moze  posluzy do nanopre'a
 
-params.species = 's.enterica' // inne mozliwosci to c.jejuni c.coli e.coli . Gatungi do resfindera
+params.species = 's.enterica' // inne mozliwosci to c.jejuni i e.coli
 params.reads = '/mnt/sda1/michall/Salmonella/*_R{1,2}_001.fastq.gz'
 
 // eqluowane w main worflow jesli jest cos innego niz illumina
 // to wchozi sciezka nanoporowe'a
+
 params.machine = 'Illumina'
 
 params.quality_initial = 5 // Parametr stosowany aktualnie tylko przez krakena
 
+
 // bazy specyficzne dla organizmu
-params.Achtman7GeneMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/MLST_Achtman" //ponownie na sztywno do poprawy docelowo 
-params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/cgMLST_v2" // sciezka do alleli z cgMLST + informacja o profilacj hierCC
-params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/pHierCC_local"
-params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/Enterobase"
+if ( params.species  == 's.enterica' ) {
+	params.Achtman7GeneMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/MLST_Achtman"  
+	params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/cgMLST_v2" // sciezka do alleli z cgMLST
+	params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/pHierCC_local" // wyniki wlasnego klastrowania
+	params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/Enterobase"
+} else if ( params.species  == 'e.coli' ) {
+	params.Achtman7GeneMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/MLST_Achtman" //ponownie na sztywno do poprawy docelowo
+        params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/cgMLST_v1" // sciezka do alleli z cgMLST
+        params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/pHierCC_local"
+        params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/Enterobase"
+} else if ( params.species  == 'c.jejuni' ) {
+	println("This option is not yet implemented")
+} else {
+	println("Incorrect species provided")
+	System.exit(0)
+}
 
 // TOKEN
 params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwIjoxNzM2MjA0NDExfQ.eyJfIjoibUsyNFlZSHd4SyIsInVzZXJuYW1lIjoiTWljaGFsX0xhem5pZXdza2kiLCJpZCI6ODg4MCwiYWRtaW5pc3RyYXRvciI6bnVsbCwiZW1haWwiOiJtbGF6bmlld3NraUBwemguZ292LnBsIiwiYXBpX2FjY2Vzc19jbG9zdHJpZGl1bSI6IlRydWUiLCJhcGlfYWNjZXNzX2Vjb2xpIjoiVHJ1ZSIsImFwaV9hY2Nlc3Nfc2VudGVyaWNhIjoiVHJ1ZSJ9.VEsyVPv8sn1zG7d3uFqEjfk6XFS2qP8P5Y5mh9VPE9w" // klucz api nadawany przez ENTEROBASE po rejestracji na stronie + wystapieniu o klucz 
@@ -275,10 +289,8 @@ process _run_pilon {
 
 }
 process run_pilon {
-  // Poki co zastepujemy hapo-g pilonem
   // Dokladne uzycie pilona jest tu https://github.com/broadinstitute/pilon/wiki/Requirements-&-Usage
   container  = 'salmonella_illumina:2.0'
-  // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
   tag "Pilon for sample $x"
   maxForks 5
   // publishDir "pilon_wyniki/${x}", mode: 'copy'
@@ -394,18 +406,32 @@ matching_profile, min_value, _, _ = getST(MLSTout = identified_profile, \
                                        profile_file = '/Achtman7GeneMLST_entero/profiles.list')
 
   
-# We only print one ST, one with the lowest possible ID and lowest identified distance
-# This info is returned via getST function in all_functions_salmonella
-formatted_string = '{aroC}\\t{dnaN}\\t{hemD}\\t{hisD}\\t{purE}\\t{sucA}\\t{thrA}'.format(**identified_profile)
+if "${params.species}" == 's.enterica':
+    klucze_sorted = ['aroC', 'dnaN', 'hemD', 'hisD', 'purE', 'sucA', 'thrA']
+elif "${params.species}" == 'e.coli':
+    klucze_sorted = ['adk', 'fumC', 'gyrB', 'icd', 'mdh', 'purA', 'recA']
+
+elif "${params.species}" == 'campylobacter':
+    pass
+
+header="ST\\t"+"\\t".join(klucze_sorted) + "\\tDistance\\n"
+formatted_string = ""
+for klucz in klucze_sorted:
+    try:
+        formatted_string += f"{identified_profile[klucz]}\\t"
+    except KeyError:
+        formatted_string += f"-1\\t" 
+
 with open('parsed_7MLST.txt', 'w') as f:
-    f.write(f'ST\\taroC\\tdnaN\\themD\\thisD\\tpurE\\tsucA\\tthrA\\tDistance\\n')
-    f.write(f'{matching_profile}\\t{formatted_string}\\t{min_value}\\n')
+    f.write(header)
+    f.write(f'{matching_profile}\\t{formatted_string}{min_value}\\n')
 		
 
 """
 }
 
 process run_Seqsero {
+  // SeqSero only works for Salmonella
   container  = 'salmonella_illumina:2.0'
   tag "Predicting OH for sample $x with Seqsero"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
@@ -420,7 +446,13 @@ process run_Seqsero {
   # -m to rodzaj algorytmu -m to chyba opart o k-mery
   # -t 4 to informacja ze inputem sa contigi z genomem
   # -p to procki 
-  python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p ${task.cpus} -i $fasta -d seqsero_out
+  if [ "${params.species}" == 's.enterica' ];then 
+      python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p ${task.cpus} -i $fasta -d seqsero_out
+  else
+      # Prepare empty output dor pipeline to work
+      mkdir seqsero_out
+      touch seqsero_out/SeqSero_result.txt
+  fi
   """
 }
 
@@ -448,7 +480,13 @@ process run_sistr {
   // ponadto w katalogu /usr/local/lib/python3.8/dist-packages/sistr/ musi byc plik dbstatus.txt
   // bo jak go nie ma to sistr_cmd dalej wymusza sciaganie bazy
   """
-  /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t ${task.cpus} -o sistr-output.tab $fasta
+  if [ "${params.species}" == 's.enterica' ];then
+    /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t ${task.cpus} -o sistr-output.tab $fasta
+  else
+    ## https://github.com/phac-nml/ecoli_serotyping.git
+    touch sistr-output.tab
+  fi
+
   """
 }
 
@@ -482,13 +520,10 @@ process run_pointfinder {
   // pozostale opcje to sciezki do baz /instalowanych wraz z tworzeniem obrazu/ 
   """
   # resfinder-owi mozna tez podac pliki fastq (-ifq) jako input
+  # params.species jest dobrany tak by rozumial go resfinder
+  # ale dla campylo sa 2 wersje c.jejuni i c.coli 
+  
   python -m resfinder -o resfinder_out/ -s ${params.species}  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
-  #virulence
-  # echo 'Analyzing virulence islands for Salmonella'
-  # mkdir tmp
-  # mkdir wyniki_spifinder
-  # wybralem opcje jak na stronie (inne niz default w skrypcoe pythonnowym)
-  # spifinder.py -i \${F1} \${F2} -o wyniki_spifinder -tmp tmp -mp kma -p /opt/docker/spifinder_db/ -x -t 0.95 -l 0.6
  """
 }
 
@@ -644,7 +679,13 @@ process run_VFDB {
   tuple val(x), path('VFDB_summary.txt')
   script:
   """
-  SPEC='Salmonella' # wpradzie jest juz paramter params.species, ale baza VFDB go nie zrozumie.
+  if [ ${params.species} == 's.enterica' ]; then
+      SPEC="Salmonella" # wpradzie jest juz paramter params.species, ale baza VFDB go nie zrozumie.
+  elif [ ${params.species} == 'e.coli' ]; then
+      SPEC="Escherichia"
+  elif [ ${params.species} == 'c.jejuni' ]; then
+      SPEC="Campylobacter"
+  fi 
   PIDENT=80 # minimalna identycznosc sekwencyjna aby stwierdzic ze jest hit 
   COV=80 # minimalne pokrycie query i hitu aby stwierdzic ze jest hit 
   EVAL=0.01  # maksymalne e-value
@@ -653,7 +694,11 @@ process run_VFDB {
 
 }
 
+//process parse_VFDB {
 
+//  Tutaj bedziemy parsowac output VFDB w celu okreslenia dla ECOLI co to za podtyp
+
+//}
 
 process run_spifinder {
   container  = 'salmonella_illumina:2.0'
@@ -673,7 +718,12 @@ process run_spifinder {
   # -p sciezka do bazy, sciagana w trakcie budowy kontenera
   # -l i -t to parametrty na alignment coverage i seq id
   # -x to rozszerzony output
-  python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
+  if [ ${params.species} == 's.enterica' ]; then
+      python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
+  else
+      # spifider jest tylko dla Salmonelli
+      touch spifinder_results/dummy.txt
+  fi
   """
 }
 
@@ -823,6 +873,22 @@ def get_matching_ST(my_file):
             elementy = line.rsplit()
     return elementy[0], elementy[1:]
 
+if "${params.species}" == 's.enterica':
+    DATABASE="senterica"
+    scheme_name="cgMLST_v2"
+    phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n'
+    lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850']
+elif "${params.species}" == 'e.coli':
+    DATABASE="ecoli"
+    scheme_name="cgMLST"
+    phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC1100(cgST Cplx)\\tHC1500\\tHC2000\\tHC2350(subsp.)\\n'
+    lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd1100', 'd1500', 'd2000', 'd2350']
+elif "${params.species}" == 'c.jejuni':
+    # No campylobacter in Enterobase 
+    # need to write separate module for that bacteria
+    pass
+
+
 my_ST, my_dist = getST('parsed_cgMLST.txt')
 matching_ST, matching_ST_allels =  get_matching_ST('matching_allel_list.txt')
 
@@ -834,22 +900,25 @@ matching_ST, matching_ST_allels =  get_matching_ST('matching_allel_list.txt')
 
 # Tworzenie lokalnych plikow wynikowych
 with open('parsed_phiercc_enterobase.txt', 'w') as f:
-    f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+    f.write(phiercc_header)
 
 with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f:
-    f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+    f.write(phiercc_header)
 
 with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
-    f.write('ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n')
+    f.write(phiercc_header)
 
-    
+if "${params.species}" == 'c.jejuni':
+    # Output files exist, module will not crash
+    exit(1)
+ 
 # 1. Szukanie w bazie enterobase
 with open('parsed_phiercc_enterobase.txt', 'a') as f:
-    address = f"https://enterobase.warwick.ac.uk/api/v2.0/senterica/cgMLST_v2/sts?st_id={matching_ST}&scheme=cgMLST_v2&limit=5"
+    address = f"https://enterobase.warwick.ac.uk/api/v2.0/{DATABASE}/{scheme_name}/sts?st_id={matching_ST}&scheme={scheme_name}&limit=5"
     #try:
     response = urlopen(__create_request(address))
     data = json.load(response)
-    lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850'] # Enterobase 3ma tylko te wartosci
+    
     lista_poziomow = [data['STs'][0]['info']['hierCC'][x] for x in lista_kluczy] # lista z uporzadkowanymi poziomami
             
     # modyfikacja wartosci w lista_poziomow na podstawie 
@@ -860,8 +929,8 @@ with open('parsed_phiercc_enterobase.txt', 'a') as f:
     except IndexError:
         pass
     formatted_string = "\t".join(list(map(str, lista_poziomow)))
-    #formatted_string = '{d0}\\t{d2}\\t{d5}\\t{d10}\\t{d20}\\t{d50}\\t{d100}\\t{d200}\\t{d400}\\t{d900}\\t{d2000}\\t{d2600}\\t{d2850}'.format(**data['STs'][0]['info']['hierCC'])
     f.write(f'{my_ST}\\t{formatted_string}\\n')
+    
     # Wywalm exccepta na rzecz maxRetries 
     #except HTTPError as Response_error:
     #    print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
@@ -889,8 +958,11 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/pHi
         line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
         if line[0] == matching_ST:
             # Znalzlem linijke z najblizszym ST poprawiam ja aby uwzglednic nie idealny hit
-            lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850'] # jest ekstra d0 bo plik 
-            lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
+            
+            if "${params.species}" == 's.enterica':
+                lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
+            elif "${params.species}" == 'e.coli':
+                lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[1101], line[1501], line[2001], line[2351]]
             try:
                 last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
                 lista_poziomow[:(last_index + 1)] = [my_ST] * (last_index +1)
@@ -924,8 +996,10 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/pHi
         line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
         if line[0] == matching_ST:
             # Znalzlem linijke z najblizszym ST poprawiam ja aby uwzglednic nie idealny hiti
-            lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850'] # jest ekstra d0 bo plik
-            lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
+            if "${params.species}" == 's.enterica':
+                lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
+            elif "${params.species}" == 'e.coli':
+                lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[1101], line[1501], line[2001], line[2351]]
             try:
                 last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
                 lista_poziomow[:(last_index+1)] = [my_ST] * (last_index+1)
@@ -1028,8 +1102,15 @@ process run_amrfinder {
   // --blast_bin input sciezka do binarek blast-a, podaje wxplicite po w kontenerze sa 2 binarki blasta te z etoki i instalowane recznie
   // Te z etoki sa za stare 
   script:
-  """ 
-  amrfinder --blast_bin /blast/bin -n $fasta -d /AMRfider  -i 0.9 -c 0.5 -o initial_output.txt -O Salmonella --plus
+  """
+  if [ ${params.species} == 's.enterica' ]; then
+      SPEC="Salmonella" # wpradzie jest juz paramter params.species, ale baza VFDB go nie zrozumie.
+  elif [ ${params.species} == 'e.coli' ]; then
+      SPEC="Escherichia"
+  elif [ ${params.species} == 'c.jejuni' ]; then
+      SPEC="Campylobacter"
+  fi
+  amrfinder --blast_bin /blast/bin -n $fasta -d /AMRfider  -i 0.9 -c 0.5 -o initial_output.txt -O \${SPEC} --plus
   cat initial_output.txt | grep -w AMR >> AMRfinder_resistance.txt
   cat initial_output.txt | grep -w VIRULENCE >> AMRfinder_virulence.txt
 
@@ -1448,7 +1529,7 @@ final_assembly = calculate_coverage(third_polish_run, processed_fastq.PE_path, p
 
 } 
 
-else {
+else if (params.machine == 'Nanopore') {
 
 //log.info "Nanopore"
 //log.info params.reads
@@ -1473,6 +1554,9 @@ initial_scaffold = run_flye(processed_fastq)
 // jedna runda pilona poki co
 final_assembly = pilon_first_nanopore(initial_scaffold, processed_fastq)
 
+} else {
+  println("Incorrect option provided")
+  System.exit(0)
 }
 
 // Post-analizy

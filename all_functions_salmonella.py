@@ -57,7 +57,15 @@ def getST(MLSTout, profile_file):
 
     # upewniamy sie ze allele dla przewidywanego zestawu alleli sa w odpowidniej kolejnosci
 
-    lista_probki = [int(MLSTout[x]) for x in lista_kluczy]
+    # na tym etapie Moze sie zdarzyc ze MLSTout ma nie wszystkie klucze ...
+    lista_probki = []
+    for klucz in lista_kluczy:
+        try:
+            lista_probki.append(int(MLSTout[klucz]))
+        except KeyError:
+            lista_probki.append(-1)
+
+    #lista_probki = [int(MLSTout[x]) for x in lista_kluczy]
 
     # szukamy w pliku z profilami takiego zestawu alleli ktore maja
     # identyczne wartosci jak nasza probka
@@ -162,6 +170,7 @@ def predict_hiercc(closest_ST, closest_ST_distance, pHierCC_profile = ''):
     :param pHierCC_profile:
     :return:
     """
+    pass
 
 
 
