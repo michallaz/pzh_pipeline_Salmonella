@@ -321,6 +321,14 @@ RUN git clone https://github.com/ncbi/amr.git
 WORKDIR /opt/docker/amr
 RUN make; make install 
 
+# Ecoli Serotypr
+WORKDIR /opt/docker
+RUN git clone https://github.com/phac-nml/ecoli_serotyping.git
+WORKDIR  /opt/docker/ecoli_serotyping
+RUN python3 setup.py install
+# Pobieramy bazy aby ectyper nie robil tego sam za kazdym razem
+RUN wget -O /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/assembly_summary_refseq.txt http://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt; wget -O  /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/refseq.genomes.k21s1000.msh https://gembox.cbcb.umd.edu/mash/refseq.genomes.k21s1000.msh
+
 COPY all_functions_salmonella.py run_blastn_ver11.sh run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py /data/
 WORKDIR /data
 CMD ["/bin/bash"]

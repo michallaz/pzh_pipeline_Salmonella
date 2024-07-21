@@ -122,7 +122,7 @@ process run_fastqc_nanopore {
   QUALITY=2
   fastqc --format fastq \
          --threads ${params.cpus} \
-         --memory 2024 \
+         --memory 4048 \
          --extract \
          --delete \
          --outdir . \
@@ -436,7 +436,7 @@ process run_Seqsero {
   tag "Predicting OH for sample $x with Seqsero"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
-  maxForks 5
+  maxForks 15
   input:
   tuple val(x), path(fasta)
   output:
@@ -445,14 +445,8 @@ process run_Seqsero {
   """
   # -m to rodzaj algorytmu -m to chyba opart o k-mery
   # -t 4 to informacja ze inputem sa contigi z genomem
-  # -p to procki 
-  if [ "${params.species}" == 's.enterica' ];then 
-      python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p ${task.cpus} -i $fasta -d seqsero_out
-  else
-      # Prepare empty output dor pipeline to work
-      mkdir seqsero_out
-      touch seqsero_out/SeqSero_result.txt
-  fi
+  # -p to procki Proces jest szybki wiec ustawie 4 + maxforks 15
+  python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p 4 -i $fasta -d seqsero_out
   """
 }
 
@@ -461,7 +455,7 @@ process run_sistr {
   tag "Predicting OH for sample $x with Sistr"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
-  maxForks 5
+  maxForks 15
   input:
   tuple val(x), path(fasta)
   output:
@@ -480,15 +474,30 @@ process run_sistr {
   // ponadto w katalogu /usr/local/lib/python3.8/dist-packages/sistr/ musi byc plik dbstatus.txt
   // bo jak go nie ma to sistr_cmd dalej wymusza sciaganie bazy
   """
-  if [ "${params.species}" == 's.enterica' ];then
-    /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t ${task.cpus} -o sistr-output.tab $fasta
-  else
-    ## https://github.com/phac-nml/ecoli_serotyping.git
-    touch sistr-output.tab
-  fi
+  /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t 4 -o sistr-output.tab $fasta
 
   """
 }
+
+process run_ecotyper {
+  // to tez samo sciaga baze ..
+  container  = 'salmonella_illumina:2.0'
+  tag "Predicting OH for sample $x with ectyper"
+  publishDir "pipeline_wyniki/${x}/ectyper_out", mode: 'copy'
+  cpus params.cpus
+  maxForks 15
+  input:
+  tuple val(x), path(fasta)
+  output:
+  tuple val(x), path('ectyper_out/*')
+  script:
+  """
+  mkdir ectyper_out
+  ectyper -i $fasta -c 4 -o ectyper_out
+
+  """
+}
+
 
 process run_pointfinder {
   container  = 'salmonella_illumina:2.0'
@@ -669,20 +678,26 @@ process run_VFDB {
   containerOptions '--volume /mnt/sda1/michall/db/VFDB:/db'
   // Ponownie montujemy na sztyno do /db bo taka lokalizacje na sztywno ma wpisany moj skrypt
   tag "Predicting VirulenceFactors for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/VFDB/", mode: 'copy'
   cpus params.cpus
   maxForks 5
   input:
   // inputem jest output procesu run_prokka
   tuple val(x), path(gff), path(faa), path(ffn), path(tsv)
   output:
-  tuple val(x), path('VFDB_summary.txt')
+  tuple val(x), path('VFDB_summary*txt'), emit: non_ecoli
+  tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), emit: ecoli
   script:
   """
+  SPEC2=""
   if [ ${params.species} == 's.enterica' ]; then
       SPEC="Salmonella" # wpradzie jest juz paramter params.species, ale baza VFDB go nie zrozumie.
+      touch VFDB_summary_Escherichia.txt
+      touch VFDB_summary_Shigella.txt
   elif [ ${params.species} == 'e.coli' ]; then
+      # typy EIEC jest w bazie VFDB jako Shigella
       SPEC="Escherichia"
+      SPEC2="Shigella"
   elif [ ${params.species} == 'c.jejuni' ]; then
       SPEC="Campylobacter"
   fi 
@@ -690,22 +705,124 @@ process run_VFDB {
   COV=80 # minimalne pokrycie query i hitu aby stwierdzic ze jest hit 
   EVAL=0.01  # maksymalne e-value
   /opt/docker/EToKi/externals/run_VFDB.sh $ffn ${task.cpus} \${SPEC} \${PIDENT} \${EVAL} \${COV}
+  mv VFDB_summary.txt VFDB_summary_\${SPEC}.txt
+  if [ \${SPEC2} == "Shigella" ]; then
+    /opt/docker/EToKi/externals/run_VFDB.sh $ffn ${task.cpus} \${SPEC2} \${PIDENT} \${EVAL} \${COV}
+    mv VFDB_summary.txt VFDB_summary_\${SPEC2}.txt
+  fi
   """
 
 }
 
-//process parse_VFDB {
+process parse_VFDB_ecoli {
+  // Parser wynikow dla E.coli w celu okreslenia czy jest to STEC/VTEC itd ...
+  tag "Predicting phenotype for sample $x"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
+  cpus params.cpus
+  input:
+  tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt')
+  output:
+  tuple val(x), path('VFDB_phenotype.txt')
+  script:
+  """
+    touch VFDB_phenotype.txt
+    ### STEC ###
+    ### Geny STX1 lub 2 
+    
+    STEC=0
+    STEC=`cat VFDB_summary_Escherichia.txt | grep -w "stx1A\\|stx2A\\|stx1B\\|stx2B" | grep -v BRAK | wc -l`
+    GENY_STEC=`cat VFDB_summary_Escherichia.txt | grep -w "stx1A\\|stx2A\\|stx1B\\|stx2B" | grep -v BRAK | cut -f4 | tr "\\n" " "`
+    if [ \${STEC} -gt 0 ]; then
+      echo -e "STEC\\t\${GENY_STEC}" >> VFDB_phenotype.txt
+    fi
+    ### Konice 
 
-//  Tutaj bedziemy parsowac output VFDB w celu okreslenia dla ECOLI co to za podtyp
+    ### EPEC ###
+    ### EPEC definiujemy obecnosci intyminy
+    ### ktora wystepuje w wynikach 2 razy jako czesc roznych sciezek (stad head -1 nizej)
 
-//}
+    EPEC=0
+    EPEC=`cat VFDB_summary_Escherichia.txt | grep -w eae  | grep -v BRAK | wc -l`
+    if [ \${EPEC} -gt 0 ]; then
+      echo -e "EPEC\\teae" >> VFDB_phenotype.txt
+    fi
+ 
+    ### Koniec
+
+    ### EAEC ###
+    ### Definicja Tomka i VFDB do uzgodnienia
+    ### geny adherence-  aafA; aafB; aafC; aafD 
+    ### geny wirulencji east1 oraz set1a i set1b
+    ### dyspersyna - gen aap
+
+    ### Geny AggR (kontroler kilku genow w tym dyspersyny), i gen aa1c czesc secration system
+    
+    EAST=0
+    SET=0  
+    AAF=0 
+    AAP=0 
+
+    AGGR=0 
+    AAIC=0
+ 
+    EAST=`cat VFDB_summary_Escherichia.txt | grep -w east1 | grep -v BRAK | wc -l`
+    SET=`cat VFDB_summary_Escherichia.txt | grep "set1A\\|set1B" | grep -v BRAK | wc -l`
+    AAF=`cat VFDB_summary_Escherichia.txt | grep "aafA\\|aafB\\|aafC\\|aafD" | grep -v BRAK | wc -l`
+    AAP=`cat VFDB_summary_Escherichia.txt | grep -w aap | grep -v BRAK | wc -l`
+
+    AGGR=`cat VFDB_summary_Escherichia.txt | grep -w aggR | grep -v BRAK | wc -l`
+    AAIC=`cat VFDB_summary_Escherichia.txt | grep -w aaic-hcp |  grep -v BRAK | wc -l`
+ 
+      
+    if [ \${AGGR} -gt 0 ] && [ \${AAIC} -gt 0 ] ; then 
+      echo -e "EAEC\\taggR\\taaiC" >> VFDB_phenotype.txt
+    elif [ \${AGGR} -gt 0 ]; then
+      echo -e "EAEC\\taggR" >> VFDB_phenotype.txt
+    elif [ \${AAIC} -gt 0 ]; then
+      echo -e "EAEC\\taaiC" >> VFDB_phenotype.txt
+    fi
+
+    ### Konice
+
+
+    ### EIEC ###
+    ### Tu jest prosta definicaja ale gen jest nie w bazie Ecoli a w bazie Shigella
+    IPAH=0
+  
+    IPAH=`cat VFDB_summary_Shigella.txt | grep ipaH | grep -v BRAK | wc -l`
+    IPAH_GENES=`cat VFDB_summary_Shigella.txt | grep ipaH | grep -v BRAK |  cut -f4 | tr "\\n" " "`
+    if [ \${IPAH} -gt 0 ]; then
+        echo -e "EIEC\\t\${IPAH_GENES}" >> VFDB_phenotype.txt
+    fi
+   
+    ### Koniec 
+
+    ### ETEC ###
+    ELT=0 # Heat liable # wiele izoform
+    EST=0 # Heat Stable
+   
+    ELT=`cat VFDB_summary_Escherichia.txt | grep elt | grep -v BRAK | wc -l`
+    ELT_GENES=`cat VFDB_summary_Escherichia.txt | grep elt | grep -v BRAK | cut -f4 | tr "\\n" " "`
+    EST=`cat VFDB_summary_Escherichia.txt | grep estIa | grep -v BRAK | wc -l`  
+   
+    if [ \${ELT} -gt 0 ] && [ \${EST} -gt 0 ] ; then
+      echo -e "ETEC\\t\${ELT_GENES}\\testIa" >> VFDB_phenotype.txt
+    elif [ \${ELT} -gt 0 ]; then
+      echo -e "ETEC\\t\${ELT_GENES}" >> VFDB_phenotype.txt
+    elif [ \${EST} -gt 0 ]; then
+      echo -e "ETEC\testIa" >> VFDB_phenotype.txt
+    fi
+
+    ### Koniec  
+  """
+  }
 
 process run_spifinder {
   container  = 'salmonella_illumina:2.0'
   tag "Predicting virulence islands for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
-  cpus params.cpus
-  maxForks 5
+  // cpus params.cpus
+  // maxForks 5
   input:
   tuple val(x), path(fasta)
   output:
@@ -718,12 +835,8 @@ process run_spifinder {
   # -p sciezka do bazy, sciagana w trakcie budowy kontenera
   # -l i -t to parametrty na alignment coverage i seq id
   # -x to rozszerzony output
-  if [ ${params.species} == 's.enterica' ]; then
-      python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
-  else
-      # spifider jest tylko dla Salmonelli
-      touch spifinder_results/dummy.txt
-  fi
+
+  python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
   """
 }
 
@@ -807,6 +920,27 @@ process run_kmerfinder {
   script:
   """
   /opt/docker/kmerfinder/kmerfinder.py -i ${reads[0]} ${reads[1]} -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+  cp kmerfider_out/results.spa .
+  cp kmerfider_out/results.txt .
+  """
+}
+
+process run_kmerfinder_nanopore {
+  tag "kmerfinder:${x}"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results*"
+  containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
+  maxForks 5
+  cpus params.cpus
+  input:
+  tuple val(x), path(reads)
+
+  output:
+  tuple val(x),path('results.spa'), path('results.txt')
+
+  script:
+  """
+  /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
   cp kmerfider_out/results.spa .
   cp kmerfider_out/results.txt .
   """
@@ -1127,7 +1261,6 @@ process run_plasmidfinder {
   container  = 'salmonella_illumina:2.0'
   tag "Predicting plasmids for sample $x"
   publishDir "pipeline_wyniki/${x}/plasmidfinder_results", mode: 'copy'
-  cpus params.cpus
   input:
   tuple val(x), path(fasta)
   output:
@@ -1172,7 +1305,7 @@ process run_flye {
   """
   # /data/Flye to sciezka z Flye instalowanego z github, uwaga
   # w kontenerze tez jest flye instalowant przez etoki i ten jest w PATH
-  /data/Flye/bin/flye --nano-raw ${fastq_gz} -g 6m -o output -t ${params.cpus} -i 3 --no-alt-contig --deterministic
+  /data/Flye/bin/flye --nano-raw ${fastq_gz} -g 6m -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
 
   """
  
@@ -1347,7 +1480,7 @@ process run_kraken2_nanopore {
 
 // SUB WORKFLOWS NANOPORE //
 
-workflow pilon_first_nanopore {
+workflow polishing_with_medaka {
 // pilona puscimy tylko raz bo zakladam ze flye po cos te rundy filtrowania robi 
 // zamieniono pilona na medaka
 take:
@@ -1492,6 +1625,7 @@ pokrycie.ONLY_GENOME
 
 workflow {
 
+// Get data
 if(params.machine == 'Illumina') {
 Channel
   .fromFilePairs(params.reads)
@@ -1500,40 +1634,34 @@ Channel
 // FASTQC
 run_fastqc(initial_fastq)
 
-// kraken2 analiza kontmainacji innymi organizmami
+// Contaminations/subspecies prediction
+// // Kraken2
 run_kraken2_illumina(initial_fastq)
 
-// Metaphlan
+// // Metaphlan
 run_metaphlan_illumina(initial_fastq)
 
-//Kmerfinder
+// // Kmerfinder
 run_kmerfinder(initial_fastq)
 
-// Czyszczenie fastq jak w etoki
+// FASTQ trimming
 processed_fastq = clean_fastq(initial_fastq)
 
-// Pierwsyz scaffold
+// Initial scaffold
 initial_scaffold = spades(processed_fastq.All_path)
 
-// Puszczamy 3-krotne wygladzanie pilon-em
+// Polishing scaffold with pilon ( 3 times )
 first_polish_run = pilon_first(initial_scaffold, processed_fastq.PE_path, processed_fastq.SE_path)
 second_polish_run = pilon_second(first_polish_run, processed_fastq.PE_path, processed_fastq.SE_path)
 third_polish_run = pilon_third(second_polish_run, processed_fastq.PE_path, processed_fastq.SE_path)
 
-// Liczymy pokrycie dla ostatecznie policzonych contigow, 
-// usuwamy contigi o pokryciu ponizej 0.2 sredniego globalnego pokrycia zgodnie z kodem z etoki
-// params.min_coverage_ratio = 0.2
-// Analize robimy jednak moim kodem
+// Remove contigs with coverage less than 0.1 avarage coverage
 
 final_assembly = calculate_coverage(third_polish_run, processed_fastq.PE_path, processed_fastq.SE_path)
 
-} 
+} else if (params.machine == 'Nanopore') {
 
-else if (params.machine == 'Nanopore') {
-
-//log.info "Nanopore"
-//log.info params.reads
-// Dla spojnosci z illumina niech kanal inital_fastq tez niech bedzie tuplem z pierwszym elementem jako identyfikatorem
+// Get Data
 Channel
   .fromPath(params.reads)
   .map {it -> tuple(it.getName().split("\\.")[0], it)}
@@ -1541,41 +1669,66 @@ Channel
 
 // FASTQC
 run_fastqc_nanopore(initial_fastq)
-// Aanliza zanieczyszczen
+
+// Contaminations/subspecies prediction
+// // Kraken2
+
 run_kraken2_nanopore(initial_fastq)
 
-// Czyszczenie fastq
-// Teoretycznie nie jest konieczne wedlug autorow flye
+// // Kmerfinder
+run_kmerfinder_nanopore(initial_fastq)
+
+// FASTQ trimming
 processed_fastq = clean_fastq_SE(initial_fastq)
 
-// scaffold flye + 3 rundy wygladzania tym anrzedziem
+// initial scaffold with Flye (with 3 internalrounds of polishing)
 initial_scaffold = run_flye(processed_fastq)
 
-// jedna runda pilona poki co
-final_assembly = pilon_first_nanopore(initial_scaffold, processed_fastq)
+// one round of assembly polishing with medaka
+final_assembly = polishing_with_medaka(initial_scaffold, processed_fastq)
 
 } else {
   println("Incorrect option provided")
   System.exit(0)
 }
 
-// Post-analizy
-// Sprawdzono dzialaja zarowno dla illuminy jak i nnaopore wiec sa poza if-em
+
+// Assembly quality
 extract_final_stats(final_assembly)
+
+// Species prediction with Achtman and core genome shemes
 MLST_out = run_7MLST(final_assembly)
 parse_7MLST(MLST_out)
-run_Seqsero(final_assembly)
-run_sistr(final_assembly)
-run_pointfinder(final_assembly)
-run_amrfinder(final_assembly)
-run_plasmidfinder(final_assembly)
+
 cgMLST_out = run_cgMLST(final_assembly)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
 run_pHierCC_out = run_pHierCC(parse_cgMLST_out)
-extract_historical_data(run_pHierCC_out) 
+extract_historical_data(run_pHierCC_out)
+
+// AMR predictions
+run_pointfinder(final_assembly)
+run_amrfinder(final_assembly)
+
+// plasmids
+run_plasmidfinder(final_assembly)
+
+// Virulence
 prokka_out = run_prokka(final_assembly)
-run_VFDB(prokka_out)
+VFDB_out=run_VFDB(prokka_out)
+
+// E.coli OH and phenotype
+if ( params.species  == 'e.coli' ) {
+run_ecotyper(final_assembly)
+parse_VFDB_ecoli(VFDB_out.ecoli)
+}
+
+// Salmonella OH and virulence factors
+
+if ( params.species  == 's.enterica' ) {
 run_spifinder(final_assembly)
+run_Seqsero(final_assembly)
+run_sistr(final_assembly)
+}
 
 } 
 
