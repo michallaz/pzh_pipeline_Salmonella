@@ -1129,7 +1129,7 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/pHi
     for line in f2:
         line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
         if line[0] == matching_ST:
-            # Znalzlem linijke z najblizszym ST poprawiam ja aby uwzglednic nie idealny hiti
+            # Znalzlem linijke z najblizszym ST poprawiam ja aby uwzglednic nie idealny hit
             if "${params.species}" == 's.enterica':
                 lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
             elif "${params.species}" == 'e.coli':
@@ -1137,9 +1137,10 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/pHi
             try:
                 last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
                 lista_poziomow[:(last_index+1)] = [my_ST] * (last_index+1)
-            except:
-                formatted_string = "\t".join(list(map(str, lista_poziomow)))
-                f.write(f'{my_ST}\\t{formatted_string}\\n')
+            except IndexError:
+                pass
+            formatted_string = "\t".join(list(map(str, lista_poziomow)))
+            f.write(f'{my_ST}\\t{formatted_string}\\n')
             # nie ma potrzeby dalszego ogladania pliku
             break            
     
