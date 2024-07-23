@@ -31,20 +31,21 @@
 
 GENOM=$1
 MAX_PROC=$2
+SCIEZKA_DO_FASTA=$3
 run_blastn () {
 	if [ ${1} == 'STY1774' ]; then
 		# przerazlwie wolny ale ten allel jest ekstremalnie krotki
-		/blast/bin/blastn -query ${2} -db /cgMLST2_entero/${1}.fasta -out blastn_tmp_${1}.tab -outfmt "6 saccver slen qstart qend sstart send pident evalue mismatch gaps qseqid sstrand" -max_target_seqs 5 -word_size 5 
+		/blast/bin/blastn -query ${2} -db ${3}/${1}.fasta -out blastn_tmp_${1}.tab -outfmt "6 saccver slen qstart qend sstart send pident evalue mismatch gaps qseqid sstrand" -max_target_seqs 5 -word_size 5 
 	else
-		/blast/bin/blastn -query ${2} -db /cgMLST2_entero/${1}.fasta -out blastn_tmp_${1}.tab -outfmt "6 saccver slen qstart qend sstart send pident evalue mismatch gaps qseqid sstrand" -max_target_seqs 5
+		/blast/bin/blastn -query ${2} -db ${3}/${1}.fasta -out blastn_tmp_${1}.tab -outfmt "6 saccver slen qstart qend sstart send pident evalue mismatch gaps qseqid sstrand" -max_target_seqs 5
 	fi
 	return 0
 }
 
 export -f run_blastn
 
-ls /cgMLST2_entero/*fasta | xargs -I {} basename {} | cut -d "." -f1 >> tmp.txt
-cat tmp.txt | xargs -I {} --max-procs=${MAX_PROC} bash -c "run_blastn {} ${GENOM}"
+ls ${SCIEZKA_DO_FASTA}/*fasta | xargs -I {} basename {} | cut -d "." -f1 >> tmp.txt
+cat tmp.txt | xargs -I {} --max-procs=${MAX_PROC} bash -c "run_blastn {} ${GENOM} ${SCIEZKA_DO_FASTA}"
 
 PREVIOUS_POS="-1"
 PREVIOUS_CONTIG="NONE"

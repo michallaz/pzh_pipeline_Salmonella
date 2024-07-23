@@ -17,15 +17,18 @@ params.quality_initial = 5 // Parametr stosowany aktualnie tylko przez krakena
 
 // bazy specyficzne dla organizmu
 if ( params.species  == 's.enterica' ) {
-	params.Achtman7GeneMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/MLST_Achtman"  
-	params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/cgMLST_v2" // sciezka do alleli z cgMLST
+	// params.Achtman7GeneMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/MLST_Achtman"  
+	// params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/cgMLST_v2" // sciezka do alleli z cgMLST
 	params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/pHierCC_local" // wyniki wlasnego klastrowania
 	params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/Enterobase"
+        // pedefiniowane bazy to MLST_Achtman cgMLST_v2 pHierCC_local  Enterobase
+        params.genus_db_absolute_path_on_host="/mnt/sda1/michall/db/Salmonella/"
 } else if ( params.species  == 'e.coli' ) {
-	params.Achtman7GeneMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/MLST_Achtman" //ponownie na sztywno do poprawy docelowo
-        params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/cgMLST_v1" // sciezka do alleli z cgMLST
+	// params.Achtman7GeneMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/MLST_Achtman" //ponownie na sztywno do poprawy docelowo
+        // params.cgMLST_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/cgMLST_v1" // sciezka do alleli z cgMLST
         params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/pHierCC_local"
         params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/Enterobase"
+       params.genus_db_absolute_path_on_host="/mnt/sda1/michall/db/Ecoli/"
 } else if ( params.species  == 'c.jejuni' ) {
 	println("This option is not yet implemented")
 } else {
@@ -357,17 +360,27 @@ process extract_final_stats {
 process run_7MLST {
   // wykorzystujemy bezposrednio Etoki, 7-genomy MLST w tym nie da sie pomylic
   container  = 'salmonella_illumina:2.0'
-  containerOptions "--volume ${params.Achtman7GeneMLST_db_absolute_path_on_host}:/Achtman7GeneMLST_entero"
+  // containerOptions "--volume ${params.Achtman7GeneMLST_db_absolute_path_on_host}:/Achtman7GeneMLST_entero"
+  containerOptions "--volume ${params.genus_db_absolute_path_on_host}:/Genus"
   tag "Predicting MLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
-  tuple val(x), path(fasta)
+  tuple val(x), path(fasta), val(SPECIES)
   output:
-  tuple val(x), path('MLSTout.txt')
+  tuple val(x), path('MLSTout.txt'), val(SPECIES)
   script:
   """
-  /opt/docker/EToKi/EToKi.py MLSTdb -i /Achtman7GeneMLST_entero/all_allels.fasta -x 0.8 -m 0.5 -r /Achtman7GeneMLST_entero/MLST_Achtman_ref.fasta -d MLST_database.tab
-  /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r /Achtman7GeneMLST_entero/MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
+  if [[ "${SPECIES}" == *"Salmo"* || "${SPECIES}" == *"Escher"* ]]; then
+  	/opt/docker/EToKi/EToKi.py MLSTdb -i /Genus/MLST_Achtman/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
+  	/opt/docker/EToKi/EToKi.py MLSType -i $fasta -r MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
+  elif [ ${SPECIES} != "unk" ]; then
+       # sciezka dla Campylobacter
+       /opt/docker/EToKi/EToKi.py MLSTdb -i /Genus/${SPECIES}/MLST/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
+       /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
+  else
+       echo ${SPECIES} >> MLSTout.txt
+  fi
+  #echo $SPECIES >> tmp.txt
   """
 }
 
@@ -382,28 +395,43 @@ process parse_7MLST {
   // proces nie jest czescie run_7MLST bo korzystam z moich pythonowych skryptow
   
   container  = 'salmonella_illumina:2.0'
-  containerOptions "--volume ${params.Achtman7GeneMLST_db_absolute_path_on_host}:/Achtman7GeneMLST_entero"
+  // containerOptions "--volume ${params.Achtman7GeneMLST_db_absolute_path_on_host}:/Achtman7GeneMLST_entero"
+  containerOptions "--volume ${params.genus_db_absolute_path_on_host}:/Genus"
   tag "Pasring MLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'parsed_7MLST.txt'
 
   input:
-  tuple val(x), path('MLSTout.txt')
+  tuple val(x), path('MLSTout.txt'), val(SPECIES)
   output:
   tuple val(x), path('parsed_7MLST.txt')
   script:
 """
 #!/usr/bin/python
-import  sys
+import sys
+import re
+
 sys.path.append('/data')
 from all_functions_salmonella import *
 
 # zostawiamy wczytanie profili dla 7 genomwego bo jest szybkie i pozwala ladnie parsowac wynik
 # nie jest jednak potrzebne dla samego szukania pasujacego ST dla zidentyfikowanego zestawu alleli w probce 
 
-known_profiles, klucze = create_profile('/Achtman7GeneMLST_entero/profiles.list')
+species="$SPECIES"
+
+if re.findall('Salmo', species) or re.findall('Esch', species):
+    sciezka='/Genus/MLST_Achtman'
+elif 'unk' not in species:
+    # Czyli ktorys z Campylo bacter
+    sciezka='/Genus/MLST'
+else:
+    with open('parsed_7MLST.txt', 'w') as f:
+        f.write(f'Provided species {species} is not handled')
+    sys.exit(1)
+
+known_profiles, klucze = create_profile(f'{sciezka}/profiles.list')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
 matching_profile, min_value, _, _ = getST(MLSTout = identified_profile, \
-                                       profile_file = '/Achtman7GeneMLST_entero/profiles.list')
+                                       profile_file = f'{sciezka}/profiles.list')
 
   
 if "${params.species}" == 's.enterica':
@@ -483,7 +511,7 @@ process run_ecotyper {
   // to tez samo sciaga baze ..
   container  = 'salmonella_illumina:2.0'
   tag "Predicting OH for sample $x with ectyper"
-  publishDir "pipeline_wyniki/${x}/ectyper_out", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   maxForks 15
   input:
@@ -492,8 +520,11 @@ process run_ecotyper {
   tuple val(x), path('ectyper_out/*')
   script:
   """
+  # opcje sa oczywisete -i to input, -c to liczba core'ow -hpid to minimalny seq identity dla antygenu H ustawiam na 90 z default (95) 
+  # bo tak przewidujemy dla Strain-u 5 z EQA 2023 poprawny antygen 
+  # -o to oczywiscie output
   mkdir ectyper_out
-  ectyper -i $fasta -c 4 -o ectyper_out
+  ectyper -i $fasta -c 4 -hpid 90 -o ectyper_out
 
   """
 }
@@ -538,25 +569,27 @@ process run_pointfinder {
 
 process run_cgMLST {
   container  = 'salmonella_illumina:2.0'
-  // podmontujemy z zewnatrz cgMLST, montujemy na /cgMLST2_entero bo skrypt run_blastn_ver6.sh
-  // ma tak za hard-kodowane i nie chce tego zmieniac poki co
   containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
+  containerOptions "--volume ${params.genus_db_absolute_path_on_host}:/Genus"
   tag "Predicting cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   maxForks 5
   input:
-  tuple val(x), path(fasta)
+  tuple val(x), path(fasta), val(SPECIES)
   output: 
-  tuple val(x), path('cgMLST.txt')
+  tuple val(x), path('cgMLST.txt'), val(SPECIES)
   // output to na razie plik ktory zwraca informacja jaka wersja allelu jest z informacja czy 
-  // jaki byl procent identycznosci sekwencyjne j mapowania na ten allel i czy ewentualnie mapowanie obejmowala caly allel, jego czesc czy moze bylo wiele mapowan na ten allel 
-  // output nie jest wiec kompatybilny z pHierCC, potem to POPRAWIC
-
-  // Aha run_blastn_ver6.sh wykorzystuje pod spodem xargs zeby rownolegle puszczac max ${task.cpus} 1-procesowych blastow
   script:
   """
-  /data/run_blastn_ver11.sh $fasta ${task.cpus}
+  if [[ "${SPECIES}" == *"Salmo"* ]]; then 
+       /data/run_blastn_ver11.sh $fasta ${task.cpus} /Genus/cgMLST_v2
+  elif [[ "${SPECIES}" == *"Esche"* ]]; then
+       /data/run_blastn_ver11.sh $fasta ${task.cpus} /Genus/cgMLST_v1
+  else
+       # Dla Campylobacter i gatunkow unk nie ma schamtu cgMLST
+       touch log.log
+  fi
   cat log.log | cut -f1,2 > cgMLST.txt
   """
 }
@@ -567,27 +600,40 @@ process parse_cgMLST {
   // local_cyfra (jesli ST jest nieznany bazie enterobase)
   // druga kolumna w tym pliku to albo 0 (dany ST zostal znaleziony w bazie) albo NOVEL jesli w bazie entero ani local nie ma takiego sample'a 
   container  = 'salmonella_illumina:2.0'
-  containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
+  // containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
+  containerOptions "--volume ${params.genus_db_absolute_path_on_host}:/Genus"
   tag "Parsing cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'parsed_cgMLST.txt'
   publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: 'matching_allel_list.txt'
   maxForks 1 // ustawiamy maxforks 1 dzieki temu mam nadzieje mamy pewnosc ze baza "local" bedzie poprawnie updatowana
   // choc na pewno zadziala to wolniej
   input:
-  tuple val(x), path('cgMLST.txt')
+  tuple val(x), path('cgMLST.txt'), val(SPECIES)
   output:
   tuple val(x), path('parsed_cgMLST.txt'), path('matching_allel_list.txt')
   script:
 """
 #!/usr/bin/python
 import  sys
+import re
 sys.path.append('/data')
 from all_functions_salmonella import *
 
-#known_profiles, klucze = create_profile('/cgMLST2_entero/profiles.list')
+species="$SPECIES"
+if re.findall('Salmo', species):
+    sciezka='/Genus/cgMLST_v2'
+elif re.findall('Esch', species):
+    sciezka='/Genus/cgMLST_v1'
+else:
+    with open('parsed_cgMLST.txt', 'w') as f, open('matching_allel_list.txt', 'w') as f2:
+        f.write(f'Provided species {species} is not handled')
+        f2.write(f'Provided species {species} is not handled')
+    sys.exit(1) 
+
+#known_profiles, klucze = create_profile(f'{sciezka}/profiles.list')
 identified_profile = parse_MLST_blastn('cgMLST.txt')
 matching_profile, min_value, allele_list_lowest_difference, sample_profile = getST(MLSTout = identified_profile, 
-                                                                   profile_file = '/cgMLST2_entero/profiles.list')
+                                                                   profile_file = f'{sciezka}/profiles.list')
 
 
 if min_value == 0:
@@ -597,7 +643,7 @@ if min_value == 0:
 else:
     # look for a profile in "local" database 
     matching_profile_local, min_value_local, allele_list_lowest_difference_local, _ = getST(MLSTout = identified_profile,
-                                                                                   profile_file = '/cgMLST2_entero/local/profiles_local.list')
+                                                                                   profile_file = f'{sciezka}/local/profiles_local.list')
     if min_value_local == 0:
         # Znalazlem wpis w bazie local (nie musze updatowac lokalnych plikow)
         # ale zapisuje odleglosc zarowno do ST z bazy entero (potrzebuje do phierCC)
@@ -608,7 +654,7 @@ else:
         # dodaje nowy wpis do tej bazy
         # Musze pobrac wpis local ST maja postac local_1, local_2 itd ...
         last_ST = 0
-        with open('/cgMLST2_entero/local/profiles_local.list') as f:
+        with open(f'{sciezka}/local/profiles_local.list') as f:
             for line in f:
                 line = line.rsplit()
                 if 'local' in line[0]:
@@ -618,7 +664,7 @@ else:
         
         novel_profile_ST = f'local_{int(last_ST)+1}'
         to_save = "\t".join(map(str, sample_profile))
-        write_novel_sample(f'{novel_profile_ST}\\t{to_save}\\n', '/cgMLST2_entero/local/profiles_local.list')
+        write_novel_sample(f'{novel_profile_ST}\\t{to_save}\\n', f'{sciezka}/local/profiles_local.list')
         
         # no na koniec zapisuje wynik do outputu, ALE UWAGA MIN_VALUE TO ZAWSZE ODLEGLOSC DO NAJBLIZSZEGO ST Z ENTERO !
 
@@ -742,9 +788,10 @@ process parse_VFDB_ecoli {
     ### ktora wystepuje w wynikach 2 razy jako czesc roznych sciezek (stad head -1 nizej)
 
     EPEC=0
-    EPEC=`cat VFDB_summary_Escherichia.txt | grep -w eae  | grep -v BRAK | wc -l`
+    EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae\\|eaeH"  | grep -v BRAK | wc -l`
+    GENY_EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae\\|eaeH"  | grep -v BRAK | cut -f4 | tr "\\n" " "`
     if [ \${EPEC} -gt 0 ]; then
-      echo -e "EPEC\\teae" >> VFDB_phenotype.txt
+      echo -e "EPEC\\t\${GENY_EPEC}" >> VFDB_phenotype.txt
     fi
  
     ### Koniec
@@ -840,6 +887,10 @@ process run_spifinder {
   """
 }
 
+
+// process run_virulencefinder {
+//
+//}
 
 process run_kraken2_illumina {
   // modul wziety z pipeline do SARS
@@ -1620,7 +1671,107 @@ emit:
 pokrycie.ONLY_GENOME
 }
 
+process get_species_illumina {
+// Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
+tag "Predicting species for ${x}"
 
+input:
+tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('summary_kraken.txt'), path('report_metaphlan_SGB.txt'), path('report_metaphlan_species.txt'), path('report_metaphlan_genra.txt'),  path('results.spa'), path('results.txt')
+
+output:
+tuple val(x), env(FINALE_SPECIES), emit: species
+
+script:
+"""
+PRE_FINALE_SPECIES=""
+cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
+cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1}' | sed s'/s__//'g | sed s'/_/ /'g >> intermediate.txt
+cat results.spa  | grep -v "#" | head -1 | cut -f1 | cut -d " " -f2,3 >> intermediate.txt
+PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
+
+
+# FINALE_SPECIES jest potrzebne tylko do okreslenia poprawnej sciezki do baz
+# NIE jest to informacja zwracana uzytkownikowi
+
+if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then 
+    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
+elif [[ "\${PRE_FINALE_SPECIES}" == *"Escher"* || "\${PRE_FINALE_SPECIES}" == *"Shigella"* ]]; then
+    FINALE_SPECIES="Escherichia coli"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter coli" ]]; then
+    FINALE_SPECIES="jejuni"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter jejuni" ]]; then
+    FINALE_SPECIES="jejuni"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter concisus" ]]; then
+    FINALE_SPECIES="concisus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter curvus" ]]; then
+    FINALE_SPECIES="concisus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter fetus" ]]; then
+    FINALE_SPECIES="fetus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter helveticus" ]]; then
+    FINALE_SPECIES="helveticus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter hyointestinalis" ]]; then
+    FINALE_SPECIES="hyointestinalis"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter insulaenigrae" ]]; then
+    FINALE_SPECIES="insulaenigrae"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lanienae" ]]; then
+    FINALE_SPECIES="lanienae"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lari" ]]; then
+    FINALE_SPECIES="lari"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
+    FINALE_SPECIES="sputorum"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
+    FINALE_SPECIES="upsaliensis"
+else
+    FINALE_SPECIES="unk"
+fi
+
+echo \${FINALE_SPECIES} >> predicte_species.txt
+
+# do campylobacter wszystkie bazy maja te gatunki (randomowa weryfikacja dla kmerfindera, pelna dla metaphlan i kraken), w przypadkach coli/jejuni i concisus/curvus
+# te gatinki sa oddzielnie 
+# Campylobacter coli i Campylobacter jejuni oddzielnie
+# Campylobacter concisus i Campylobacter curvus sa tez oddzielnie
+# Campylobacter fetus 
+# Campylobacter helveticus
+# Campylobacter hyointestinalis
+# Campylobacter insulaenigrae
+# Campylobacter lanienae
+# Campylobacter lari
+# Campylobacter sputorum
+# Campylobacter upsaliensis
+
+"""
+}
+
+workflow predict_species_illumina {
+// Workflow puszcza 3 programy (kraken2, metaphlan i kmerfinder)
+// jego celem jest zwrocenie informacji o gatunku (tak naprawde wazne tylko dla Campylo)
+// tak bym nizej mogl okreslic poprawnie baze
+take:
+initial_fastq
+main:
+// kraken
+kraken2_out = run_kraken2_illumina(initial_fastq)
+
+// Metaphlan
+metaphlan_out = run_metaphlan_illumina(initial_fastq)
+
+// Kmerfinder
+kmerfinder_out = run_kmerfinder(initial_fastq)
+
+merge1 = metaphlan_out.join(kmerfinder_out, by : 0, remainder : true)
+programs_out = kraken2_out.join(merge1,  by : 0, remainder : true)
+final_species = get_species_illumina(programs_out)
+emit:
+final_species.species
+}
+
+// TO DO
+// workflow predict_species_nanopore {
+// Workflow puszcza 3 programy (kraken2, metaphlan i kmerfinder)
+// jego celem jest zwrocenie informacji o gatunku (tak naprawde wazne tylko dla Campylo)
+// tak bym nizej mogl okreslic poprawnie baze
+// }
 
 // MAIN WORKFLOW //
 
@@ -1637,16 +1788,20 @@ run_fastqc(initial_fastq)
 
 // Contaminations/subspecies prediction
 // // Kraken2
-run_kraken2_illumina(initial_fastq)
+// run_kraken2_illumina(initial_fastq)
 
 // // Metaphlan
-run_metaphlan_illumina(initial_fastq)
+// run_metaphlan_illumina(initial_fastq)
 
 // // Kmerfinder
-run_kmerfinder(initial_fastq)
+// run_kmerfinder(initial_fastq)
+
+predict_species_out = predict_species_illumina(initial_fastq)
+
 
 // FASTQ trimming
 processed_fastq = clean_fastq(initial_fastq)
+
 
 // Initial scaffold
 initial_scaffold = spades(processed_fastq.All_path)
@@ -1698,10 +1853,11 @@ final_assembly = polishing_with_medaka(initial_scaffold, processed_fastq)
 extract_final_stats(final_assembly)
 
 // Species prediction with Achtman and core genome shemes
-MLST_out = run_7MLST(final_assembly)
+final_assembly_with_species = final_assembly.join(predict_species_out, by : 0)
+MLST_out = run_7MLST(final_assembly_with_species)
 parse_7MLST(MLST_out)
 
-cgMLST_out = run_cgMLST(final_assembly)
+cgMLST_out = run_cgMLST(final_assembly_with_species)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
 run_pHierCC_out = run_pHierCC(parse_cgMLST_out)
 extract_historical_data(run_pHierCC_out)
