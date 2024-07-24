@@ -26,18 +26,18 @@ params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/krak
 
 // // Databases specific for a given genus
 if ( params.species  == 'Salmonella' ) {
-	params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/pHierCC_local" // wyniki wlasnego klastrowania
+	// params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/pHierCC_local" // wyniki wlasnego klastrowania
 	params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/Enterobase"
         // pedefiniowane bazy to MLST_Achtman cgMLST_v2 pHierCC_local  Enterobase
         params.genus_db_absolute_path_on_host="/mnt/sda1/michall/db/Salmonella/"
 } else if ( params.species  == 'Escherichia' ) {
-        params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/pHierCC_local"
+        // params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/pHierCC_local"
         params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/Enterobase"
 	params.genus_db_absolute_path_on_host="/mnt/sda1/michall/db/Ecoli/"
 } else if ( params.species  == 'Campylobacter' ) {
 	params.genus_db_absolute_path_on_host="/mnt/sda1/michall/db/Campylobacter"
 	// tylko jejuni ma cgMLST wiec gdy species nie bedie sie zgadzal to omijamy ten fragment
-	params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Campylobacter/jejuni/pHierCC_local" 
+	// params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Campylobacter/jejuni/pHierCC_local" 
 	// Do implementacji na podstawie pubmlst jesli jest to mozliwe
 	params.Enterobase_db_absolute_path_on_host = "" 
 
@@ -373,7 +373,6 @@ else:
         f3.write(f'unk\\tUnknown species')
 
     sys.exit(1)
-
 ### Deterine ST of out Sample
 known_profiles, klucze_sorted = create_profile(f'{sciezka}/profiles.list')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
@@ -667,10 +666,11 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
 
         f3.write(f'ST\\t{locus_list_str}\\n')
         f3.write(f'{matching_ST}\\t{allele_list_lowest_difference_str}\\n')
-
+        sample_ST_final_id=matching_ST
+   
     else:
         # look for a profile in "local" database 
-        matching_profile_local, min_value_local, allele_list_lowest_difference_local, _, _ = getST(MLSTout = identified_profile,
+        matching_ST_local, min_value_local, allele_list_lowest_difference_local, _, _ = getST(MLSTout = identified_profile,
                                                                                              profile_file = f'{sciezka}/local/profiles_local.list')
         if min_value_local == 0:
             f1.write(f'ST_sample\\tST_database\\tDistance\\tComment\\n')
@@ -681,6 +681,7 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
 
             f3.write(f'ST\\t{locus_list_str}\\n')
             f3.write(f'{matching_ST_local}\\t{allele_list_lowest_difference_str}\\n')
+            sample_ST_final_id=matching_ST_local
         else:
             # new allelic profile not present in either external or local databases
             last_ST = 0
@@ -704,7 +705,7 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
 
             f3.write(f'ST\\t{klucze_sorted_string}\\n')
             f3.write(f'{matching_ST}\\t{allele_list_lowest_difference_str}\\n')
-
+            sample_ST_final_id=novel_profile_ST
 """
 }
 
@@ -1028,24 +1029,18 @@ process run_kmerfinder_nanopore {
   """
 }
 
-process run_pHierCC {
-  
+process run_pHierCC_enterobase {
   // Funkcja odpytuje API Enterobase w celu wyciagniecia profuili z tej bazu
-  // Ponadto Funkcja odpytuje dwa pliki przygotowane przeze mnie 
-  // Jeden zawierajacy klastrowanie SINGLE linkage zbudowane na 430k profili z enterobase
-  // Drugi zawierajacy klastrowanie COMPLETE linkage zbudowane na 430k profili z enterobae
-  // Jesli ST jest nowy NIE obecny w zadnej z baz program nic nie zwraca ?
+  // It work only for Salmonella and Escherichia as Campylo is not present in Enterobase
   maxRetries 3
-  errorStrategy 'retry' 
+  errorStrategy 'retry'
   container  = 'salmonella_illumina:2.0'
-  // containerOptions "--volume ${params.cgMLST_db_absolute_path_on_host}:/cgMLST2_entero"
-  containerOptions "--volume ${params.phiercc_db_absolute_path_on_host}:/pHierCC_local"
-  tag "Predicting hierCC levels for sample $x"
+  tag "Predicting hierCC from enterobase for sample $x"
   publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
   input:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES)
   output:
-  tuple val(x), path('parsed_phiercc_enterobase.txt'), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt')
+  tuple val(x), path('parsed_phiercc_enterobase.txt')
   script:
 """
 #!/usr/bin/python
@@ -1062,8 +1057,6 @@ import re
 import numpy as np
 import time
 
-# rzadkich przypadkach gdyby bylo na raz za duzo requestow
-# Enterobase zwraca blad wiec zrandomizujmy moment wejscia
 time.sleep(np.random.randint(2,20))
 
 API_TOKEN = "${params.enterobase_api_token}"
@@ -1075,91 +1068,121 @@ def __create_request(request_str):
     return request
 
 def getST(my_file):
-    # prosta funkcja zwraca numer ST sample'a oraz odleglosc do najblzszego znanego ST z bazy enterobase
     with open(my_file) as f:
         for line in f:
             line = line.rsplit()
-    return line[0], int(line[1])
+            if line[0] == "ST_sample":
+                # pass the first line
+                continue
+            else:
+                # the second line in a file is what we want
+                return line[0], line[1], int(line[2])
 
-def get_matching_ST(my_file):
-    # funkcja bierze plik matching_allel_list.txt' i wyciaga z niego pierwszy element (najblizy ST z bazye entero)
-    # i elementy 1: (profil alleli tego ST)
-    with open(my_file) as f:
-        for line in f:
-            elementy = line.rsplit()
-    return elementy[0], elementy[1:]
+species="$SPECIES"
 
-if "${params.species}" == 's.enterica':
+ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
+
+if re.findall('Salmo', species):
     DATABASE="senterica"
     scheme_name="cgMLST_v2"
     phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n'
     lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850']
-elif "${params.species}" == 'e.coli':
+elif re.findall('Escher', species):
     DATABASE="ecoli"
     scheme_name="cgMLST"
     phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC1100(cgST Cplx)\\tHC1500\\tHC2000\\tHC2350(subsp.)\\n'
     lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd1100', 'd1500', 'd2000', 'd2350']
-elif "${params.species}" == 'c.jejuni':
-    # No campylobacter in Enterobase 
-    # need to write separate module for that bacteria
-    pass
-
-
-my_ST, my_dist = getST('parsed_cgMLST.txt')
-matching_ST, matching_ST_allels =  get_matching_ST('matching_allel_list.txt')
-
-
-# mamy nastepujace mozliwosci  my_dist wynosi 0 lub nie-0  (czyli znalzlem cos niwego badz nie)
-# jesli wynosi 0 nie ma 
-# jesli jest cos nowego do ide sciezka (cos starego i z bazy entero) ale modyfikuje linijki w zaleznosci od dystansu i dodaje je do bazy local
-
+else:
+    with open('parsed_phiercc_enterobase.txt', 'w') as f:
+        f.write('Provided species: {species} is not part of the Enterobase')
+    sys.exit(1)
 
 # Tworzenie lokalnych plikow wynikowych
 with open('parsed_phiercc_enterobase.txt', 'w') as f:
     f.write(phiercc_header)
-
-with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f:
-    f.write(phiercc_header)
-
-with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f:
-    f.write(phiercc_header)
-
-if "${params.species}" == 'c.jejuni':
-    # Output files exist, module will not crash
-    exit(1)
- 
-# 1. Szukanie w bazie enterobase
-with open('parsed_phiercc_enterobase.txt', 'a') as f:
-    address = f"https://enterobase.warwick.ac.uk/api/v2.0/{DATABASE}/{scheme_name}/sts?st_id={matching_ST}&scheme={scheme_name}&limit=5"
-    #try:
-    response = urlopen(__create_request(address))
-    data = json.load(response)
-    
-    lista_poziomow = [data['STs'][0]['info']['hierCC'][x] for x in lista_kluczy] # lista z uporzadkowanymi poziomami
-            
-    # modyfikacja wartosci w lista_poziomow na podstawie 
-    # wartsoci z hierCC z odelgoscia mniejsza niz dystans do najblzszego znangeo przedstawiciela z enterobase sa podmieniane na my_ST 
+    address = f"https://enterobase.warwick.ac.uk/api/v2.0/{DATABASE}/{scheme_name}/sts?st_id={ST_matching}&scheme={scheme_name}&limit=5"
     try:
-        last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
-        lista_poziomow[:(last_index+1)] = [my_ST] * (last_index + 1)
-    except IndexError:
-        pass
-    formatted_string = "\t".join(list(map(str, lista_poziomow)))
-    f.write(f'{my_ST}\\t{formatted_string}\\n')
-    
-    # Wywalm exccepta na rzecz maxRetries 
-    #except HTTPError as Response_error:
-    #    print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
+        response = urlopen(__create_request(address))
+        data = json.load(response)
+        lista_poziomow = [data['STs'][0]['info']['hierCC'][x] for x in lista_kluczy] # lista z uporzadkowanymi poziomami
+        # modify outpuy to include distance > 0 that mean we have "local" STs
+        try:
+            last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
+            lista_poziomow[:(last_index+1)] = [ST_sample] * (last_index + 1)
+        except IndexError:
+            pass
+        formatted_string = "\t".join(list(map(str, lista_poziomow)))
+        f.write(f'{ST_sample}\\t{formatted_string}\\n')
+    except HTTPError as Response_error:
+        print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
 
-# 2. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
-with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/pHierCC_local/profile_single_linkage.HierCC.gz') as f2, open('/pHierCC_local/profile_single_linkage.HierCC.index') as f3:
+"""
+}
 
-    # wstepne szukanie w f3, wynikow szukamy w f2, a zapisujemy do f
+process run_pHierCC_local {
+  
+  // Ponadto Funkcja odpytuje dwa pliki przygotowane przeze mnie 
+  // Jeden zawierajacy klastrowanie SINGLE linkage zbudowane na 430k profili z enterobase
+  // Drugi zawierajacy klastrowanie COMPLETE linkage zbudowane na 430k profili z enterobae
+  container  = 'salmonella_illumina:2.0'
+  containerOptions "--volume ${params.genus_db_absolute_path_on_host}:/Genus"
+  tag "Predicting hierCC with local database for sample $x"
+  publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
+  input:
+  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES)
+  output:
+  tuple val(x), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt')
+  script:
+"""
+#!/usr/bin/python
+import  sys
+import gzip
+import re
+import numpy as np
+
+def getST(my_file):
+    with open(my_file) as f:
+        for line in f:
+            line = line.rsplit()
+            if line[0] == "ST_sample":
+                # pass the first line
+                continue
+            else:
+                # the second line in a file is what we want
+                return line[0], line[1], int(line[2])
+
+species="$SPECIES"
+
+ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
+
+if re.findall('Salmo', species):
+    directory='/Genus/pHierCC_local'
+    phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n'
+    lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850']
+elif re.findall('Escher', species):
+    directory='/Genus/pHierCC_local'
+    phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC1100(cgST Cplx)\\tHC1500\\tHC2000\\tHC2350(subsp.)\\n'
+    lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd1100', 'd1500', 'd2000', 'd2350']
+elif re.findall('jejun', species):
+    # Provisal selecetion of jejuni
+    phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC1100\\n' 
+    lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd1100']
+    directory='/Genus/jejuni/pHierCC_local'
+
+else:
+    with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f1, open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f2:
+        f1.write('Provided species: {species} is not part of any cgMLST scheme')
+        f2.write('Provided species: {species} is not part of any cgMLST scheme')
+        sys.exit(1)
+
+# 1. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
+with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f, gzip.open(f'{directory}/profile_single_linkage.HierCC.gz') as f2, open(f'{directory}/profile_single_linkage.HierCC.index') as f3:
+    f.write(phiercc_header)
     pointer = 0
     for line in f3:
         line = line.rsplit()
         try:
-            if int(matching_ST) < int(line[0]):
+            if int(ST_matching) < int(line[0]):
                 break
             else:
                 pointer = int(line[1])
@@ -1169,35 +1192,36 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'a') as f, gzip.open('/pHi
             # pierwszy wiersz w indekszie to naglowek
     # ustaw kursow blizej lokalziacji przed szukanym ST
     f2.seek(pointer)
-	
     for line in f2:
         line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
-        if line[0] == matching_ST:
-            # Znalzlem linijke z najblizszym ST poprawiam ja aby uwzglednic nie idealny hit
-            
-            if "${params.species}" == 's.enterica':
+        if line[0] == ST_matching:
+            if re.findall('Salmo', species):    
                 lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
-            elif "${params.species}" == 'e.coli':
+            elif re.findall('Escher', species):
                 lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[1101], line[1501], line[2001], line[2351]]
+            elif re.findall('jejun', species):
+                lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[1101]]
+            else:
+                pass
+
             try:
                 last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
-                lista_poziomow[:(last_index + 1)] = [my_ST] * (last_index +1)
+                lista_poziomow[:(last_index + 1)] = [ST_sample] * (last_index +1)
             except IndexError:
                 pass
             formatted_string = "\t".join(list(map(str, lista_poziomow)))
-            f.write(f'{my_ST}\\t{formatted_string}\\n')
+            f.write(f'{ST_sample}\\t{formatted_string}\\n')
             # nie ma potrzeby dalszego ogladania pliku
             break
 
-# 3. Szukanie pHierCC w wynikach 
-with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/pHierCC_local/profile_complete_linkage.HierCC.gz') as f2, open('/pHierCC_local/profile_complete_linkage.HierCC.index') as f3:
-
-    # wstepne szukanie w f3, wynikow szukamy w f2, a zapisujemy do f
+# 2. Szukanie pHierCC w wynikach  maximum spanning tree
+with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f, gzip.open(f'{directory}/profile_complete_linkage.HierCC.gz') as f2, open(f'{directory}/profile_complete_linkage.HierCC.index') as f3:
+    f.write(phiercc_header)
     pointer = 0
     for line in f3:
         line = line.rsplit()
         try:
-            if int(matching_ST) < int(line[0]):
+            if int(ST_matching) < int(line[0]):
                 break
             else:
                 pointer = int(line[1])
@@ -1207,25 +1231,26 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'a') as f, gzip.open('/pHi
             # pierwszy wiersz w indekszie to naglowek
     # ustaw kursow blizej lokalziacji przed szukanym ST
     f2.seek(pointer)
-
     for line in f2:
         line = list(map(lambda x: x.decode('utf-8', errors='replace'), line.split()))
-        if line[0] == matching_ST:
-            # Znalzlem linijke z najblizszym ST poprawiam ja aby uwzglednic nie idealny hit
-            if "${params.species}" == 's.enterica':
+        if line[0] == ST_matching:
+            if re.findall('Salmo', species):
                 lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[901], line[2001], line[2601], line[2851]]
-            elif "${params.species}" == 'e.coli':
+            elif re.findall('Escher', species):
                 lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[1101], line[1501], line[2001], line[2351]]
-            try:
-                last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
-                lista_poziomow[:(last_index+1)] = [my_ST] * (last_index+1)
-            except IndexError:
+            elif re.findall('jejun', species):
+                lista_poziomow = [line[1], line[3], line[6], line[11], line[21], line[51], line[101],  line[201], line[401], line[1101]]
+            else:
                 pass
+            try:
+                last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1] 
+                lista_poziomow[:(last_index + 1)] = [ST_sample] * (last_index +1)
+            except IndexError:
+                pass 
             formatted_string = "\t".join(list(map(str, lista_poziomow)))
-            f.write(f'{my_ST}\\t{formatted_string}\\n')
+            f.write(f'{ST_sample}\\t{formatted_string}\\n')
             # nie ma potrzeby dalszego ogladania pliku
-            break            
-    
+            break
 """
 }
 
@@ -1868,6 +1893,10 @@ parse_7MLST(MLST_out)
 
 cgMLST_out = run_cgMLST(final_assembly_with_species)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
+if ( params.species  == 'Escherichia' || params.species  == 'Salmonella') {
+run_pHierCC_enterobase(parse_cgMLST_out)
+}
+run_pHierCC_local(parse_cgMLST_out)
 // run_pHierCC_out = run_pHierCC(parse_cgMLST_out)
 // extract_historical_data(run_pHierCC_out)
 
