@@ -37,10 +37,6 @@ def getST(MLSTout, profile_file):
     loci z danego MLST). MLSTout to zwykly slownik,na tomiast profile_dict to slownik slownikow wynik funkcji
     create_profile. Jeśli nie znajdziemy ST dla slownika MLSToit , to 1. tworzymy nowy ST dla niego (int, +1 w stosunku
     do największego ST obecnego w profile_dict); 2. updatujemy plik profile_file o nowy ST.
-    :param MLSTout: slownik
-    :param profile_dict: slownik wygenerowany create_profile
-    :param profile_file: String do pliku profiles
-    :param lista_kluczy: list, lsta posortowanych alleli w danym schemacie
     :return: string, sequence type
     """
 
@@ -103,7 +99,7 @@ def getST(MLSTout, profile_file):
         # obejscie dla ST w postaci local_{numer}
         ST = np.min([int(x.split('_')[1]) for x, y in slownik_roznic.items() if y == min_value])
         ST = f'local_{ST}'
-    return str(ST), min_value, allele_list_lowest_difference, lista_probki
+    return str(ST), min_value, allele_list_lowest_difference, lista_probki, lista_kluczy
 
 def write_novel_sample(profile, output_file):
     """
