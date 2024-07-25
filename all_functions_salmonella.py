@@ -33,11 +33,18 @@ def create_profile(profile_file):
 
 def getST(MLSTout, profile_file):
     """
-    Funkcja do porownywania dwoch slownikow. Oba slowniki musza miec identyczne klucze (w tym wypadku odpowiadajace
-    loci z danego MLST). MLSTout to zwykly slownik,na tomiast profile_dict to slownik slownikow wynik funkcji
-    create_profile. Jeśli nie znajdziemy ST dla slownika MLSToit , to 1. tworzymy nowy ST dla niego (int, +1 w stosunku
-    do największego ST obecnego w profile_dict); 2. updatujemy plik profile_file o nowy ST.
-    :return: string, sequence type
+    Funkcja szuka w bazie profili ST o najnizszym dystansie do profilu analizowanej probki. Inpu to profil alleliczny
+    probki (MLSTout), oraz lista wszustkich znanych profili w danym schemacie. Odleglosc liczona jest przy pomocy
+    funkcji calculate_phiercc_distance, ktora jest reimplementacja funkcji oryginalnie zaimplementowanej w
+    programie pHierCC. W przypadku nieobecnosci profilu w znanej bazie identycznego do profilu probki, zwracany
+    jest ST o najmniejszej odleglosci, w przypadku wielu takich profili zwracany jest ten ktory ma najnizsze ST.
+    :return: lista
+    str(ST), min_value, allele_list_lowest_difference, lista_probki, lista_kluczy
+    ST - numer najblizszego ST znalezionego w bazie pasujacego do profilu analizowanej probki
+    min_value - odleglosc miedzy profilami probk,i a tym znalezionym w bazie
+    allele_string_lowest_difference - profil alleliczny dla zwracanego ST, w postaci tab-separarted string
+    lista_probki_string - profil alleliczny analizowanej probki w postaci tab-separated string
+    lista_kluczy_string - lista zawierajace nazwy loci w danym schemacie w postaci tab separated string
     """
 
     #pierwszy przelot potrzebujemy listy kluczy/alleli w danym profilu
@@ -51,9 +58,9 @@ def getST(MLSTout, profile_file):
 
     slownik_roznic = {} #slownik ktory jako klucze ma nazwe profilu, jako wartosc ilosc roznic do "naszej" probki
 
-    # upewniamy sie ze allele dla przewidywanego zestawu alleli sa w odpowidniej kolejnosci
 
-    # na tym etapie Moze sie zdarzyc ze MLSTout ma nie wszystkie klucze ...
+    # Tworzymy profill alleliczny probki w kolejnosci loci identycznej jak w pliku z baza alleli
+    # W przypadku braku danego locus-a dajemy -1
     lista_probki = []
     for klucz in lista_kluczy:
         try:
@@ -61,45 +68,44 @@ def getST(MLSTout, profile_file):
         except KeyError:
             lista_probki.append(-1)
 
-    #lista_probki = [int(MLSTout[x]) for x in lista_kluczy]
-
-    # szukamy w pliku z profilami takiego zestawu alleli ktore maja
-    # identyczne wartosci jak nasza probka
-    # jesli takiego nie znajdziemy szukamy ST o najnizszej wartosci
-
+    # inicjalizacja zmiennych
     minimalna_roznica = 3200
     slownik_roznic['local_0'] = minimalna_roznica # inicjujemy slownik dummy wartoscia
-    allele_list_lowest_difference = ''
+    allele_string_lowest_difference = ''
+    lista_probki_string = "\t".join(list(map(str,lista_probki)))
+    lista_kluczy_string = "\t".join(list(map(str,lista_kluczy)))
+
+    # iterujemy po pliku z profilami, tym razem liczymy odleglosc miedzy znanymi profilami allelicznymi
+    # a profilem probki, przerywamy iteracje po pliku przy znalezieniu profilu z odlegloscia 0
     with open(profile_file) as f:
         for line in f:
             if re.search('ST', line):
+                # omijami pierwsza linijke
                 pass
             else:
                 elementy = line.rsplit()
-                # tworzymy slownik dla danego ST
+                # wyciagamy ST  z profilu i allele
                 ST_dict = elementy[0] # ST w pliku z profilami
-                lista_ST = list(map(int,elementy[1:]))
+                lista_ST = list(map(int,elementy[1:])) # profil alleliczny
                 slownik_roznic[ST_dict] = 3200
-                # Spradzic czy zadziala dla 7MLST
+
                 slownik_roznic[ST_dict] = calculate_phiercc_distance(lista_probki, lista_ST)
-                #slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 and y > 0))
-                # znalzlem pasujacy hit przerywam
+
+                # updatuje zmienne minimalna roznica i allele_string_lowest_difference
                 if slownik_roznic[ST_dict] < minimalna_roznica:
                     minimalna_roznica = slownik_roznic[ST_dict]
-                    allele_list_lowest_difference = "\t".join(map(str, elementy))
+                    allele_string_lowest_difference = "\t".join(map(str, elementy[1:]))
+                # Przerwyam obliczenia jesli znalazlem odleglosc 0
                 if slownik_roznic[ST_dict] == 0:
                     break
 
-    # zwracamy tylko NAJMNIEJSZY ST z listy
-    # innych ST i tak nie bede uzywal
-    min_value = min(list(slownik_roznic.values()))
     try:
-        ST = np.min([int(x) for x, y in slownik_roznic.items() if y == min_value])
+        ST = np.min([int(x) for x, y in slownik_roznic.items() if y == minimalna_roznica])
     except:
-        # obejscie dla ST w postaci local_{numer}
-        ST = np.min([int(x.split('_')[1]) for x, y in slownik_roznic.items() if y == min_value])
+        # obejscie jesli analizujemy baze local gdzie  ST maja postac f'local_{numer}'
+        ST = np.min([int(x.split('_')[1]) for x, y in slownik_roznic.items() if y == minimalna_roznica])
         ST = f'local_{ST}'
-    return str(ST), min_value, allele_list_lowest_difference, lista_probki, lista_kluczy
+    return str(ST), minimalna_roznica, allele_string_lowest_difference, lista_probki_string, lista_kluczy_string
 
 def write_novel_sample(profile, output_file):
     """
@@ -157,86 +163,7 @@ def calculate_phiercc_distance(wektor_x, wektor_y, allowed_missing=0.05):
 
     return dist
 
-def predict_hiercc(closest_ST, closest_ST_distance, pHierCC_profile = ''):
-    """
-    Funkcja do przypisywania poziomow phiercc dla probek dla ktorych nie znaleziono "idealnego" profilu
-    tzn sa nowe ...
-    :param closest_ST:
-    :param closest_ST_distance:
-    :param pHierCC_profile:
-    :return:
-    """
-    pass
 
-
-
-def _getST(MLSTout, profile_dict, lista_kluczy):
-    """
-    Funkcja do porownywania dwoch slownikow. Oba slowniki musza miec identyczne klucze (w tym wypadku odpowiadajace
-    loci z danego MLST). MLSTout to zwykly slownik,na tomiast profile_dict to slownik slownikow wynik funkcji
-    create_profile. Jeśli nie znajdziemy ST dla slownika MLSToit , to 1. tworzymy nowy ST dla niego (int, +1 w stosunku
-    do największego ST obecnego w profile_dict); 2. updatujemy plik profile_file o nowy ST.
-    :param MLSTout: slownik
-    :param profile_dict: slownik wygenerowany create_profile
-    :param profile_file: String do pliku profiles
-    :param lista_kluczy: list, lsta posortowanych alleli w danym schemacie
-    :return: string, sequence type
-    """
-
-
-    ST = '0'
-    slownik_roznic = {} #slownik ktory jako klucze ma nazwe profilu, jako wartosc ilosc roznic do "naszej" probki
-    lista_probki = [MLSTout[x] for x in lista_kluczy]
-    for ST_dict in profile_dict:
-        slownik_roznic[ST_dict] = 0
-        lista_ST = [profile_dict[ST_dict][x] for x in lista_kluczy]
-        slownik_roznic[ST_dict] = sum(1 for x, y in zip(lista_probki, lista_ST) if (x != y) and ( x > 0 or y > 0))
-        # W cgMLST czasami sa 0 lub wartosci <0 ktore chyba nie sa uwzgledniane
-        # przy wyborze ST
-        if slownik_roznic[ST_dict] == 0:
-            break
-
-    if 0 in slownik_roznic.values():
-        ST = [x for x, y in slownik_roznic.items() if y == 0][0]
-        return ST
-    elif 1 in slownik_roznic.values():
-        ST = [x for x, y in slownik_roznic.items() if y == 0]
-        # ST is a list, we nned to write all possible
-        return ST
-    else:
-        return slownik_roznic
-        # We have smt completly new for 7MLST we better think what to do here ...
-
-    # Na razie nie ma potrzeby tego uzywac
-    # dodac oddzielna funkcje jesli znaleziono nowy schemat aby updatowac plik ze schematami ?
-    # ale wtedy ten plik musi byc na ZEWNATRZ kontenera ...
-
-    # if ST == 0:
-    #
-    #     # nowa kombinacja alleli
-    #     # sprawdzamy najblizszy ST dla ciekawosci
-    #     identity = 0
-    #     for klucz in  profile_dict[ST_dict]:
-    #         if profile_dict[ST_dict][klucz] == MLSTout[klucz]:
-    #             identity +=1
-    #     slownik_tmp_identity[ST_dict] = identity
-    #
-    #     # Na koniec nadajemy nowy St i dopisujemy poprawna kombinacje alleli do pliku profile
-    #     ST = max(map(int, profile_dict.keys())) + 1
-    #     with open(profile_file, 'a') as f:
-    #         msg = "\t".join([str(MLSTout[x]) for x in lista_kluczy])
-    #         f.write(f'{ST}\t{msg}\n')
-    # #tworzymy plik wsadowy do hiercc
-    #
-    # with open('to_hiercc.txt', 'w') as f:
-    #     msg = [str(ST)] + [str(MLSTout[x]) for x in lista_kluczy]
-    #     lista_kluczy = ['ST'] + lista_kluczy
-    #     f.write('{naglowek}\n{body}'.format(naglowek = "\t".join(lista_kluczy), body = "\t".join(msg)))
-    #
-    #
-    # return ST, slownik_tmp_identity
-def update_MLSTprofile_file():
-    pass
 
 def parse_MLST_tsv(file_path, long = True, sep = "\t"):
     """

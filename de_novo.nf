@@ -25,22 +25,14 @@ params.kmerfinder_db_absolute_path_on_host = "/mnt/sda1/michall/db/Kmerfinder/km
 params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/"
 
 // // Databases specific for a given genus
+// // Maybe this should be ignored ?
 if ( params.species  == 'Salmonella' ) {
-	// params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/pHierCC_local" // wyniki wlasnego klastrowania
-	params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Salmonella/Enterobase"
-        // pedefiniowane bazy to MLST_Achtman cgMLST_v2 pHierCC_local  Enterobase
         params.genus_db_absolute_path_on_host="/mnt/sda1/michall/db/Salmonella/"
 } else if ( params.species  == 'Escherichia' ) {
-        // params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/pHierCC_local"
-        params.Enterobase_db_absolute_path_on_host = "/mnt/sda1/michall/db/Ecoli/Enterobase"
 	params.genus_db_absolute_path_on_host="/mnt/sda1/michall/db/Ecoli/"
 } else if ( params.species  == 'Campylobacter' ) {
 	params.genus_db_absolute_path_on_host="/mnt/sda1/michall/db/Campylobacter"
-	// tylko jejuni ma cgMLST wiec gdy species nie bedie sie zgadzal to omijamy ten fragment
-	// params.phiercc_db_absolute_path_on_host = "/mnt/sda1/michall/db/Campylobacter/jejuni/pHierCC_local" 
-	// Do implementacji na podstawie pubmlst jesli jest to mozliwe
 	params.Enterobase_db_absolute_path_on_host = "" 
-
 } else {
 	println("Incorrect species provided")
 	System.exit(0)
@@ -372,49 +364,38 @@ else:
         f3.write(f'ST\\tComment\\n')
         f3.write(f'unk\\tUnknown species')
 
-    sys.exit(1)
+    sys.exit(0)
 ### Deterine ST of out Sample
 known_profiles, klucze_sorted = create_profile(f'{sciezka}/profiles.list')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
-matching_ST, min_value, _, _, _ = getST(MLSTout = identified_profile, \
-                                        profile_file = f'{sciezka}/profiles.list')
+matching_ST, min_value, matching_ST_profile, sample_profile, all_loci_names = getST(MLSTout = identified_profile, \
+                                                                              profile_file = f'{sciezka}/profiles.list')
 
+
+### matching_ST is a string
+### matching_ST_profile, sample_profile, all_loci_names are all tab-separated strings
+### min_valu is int
 
 ### Prep output
-### ### Names of alleles in a give scheme
-klucze_sorted_string = "\\t".join(klucze_sorted)
-header="ST\\t"+"\\t".join(klucze_sorted) + "\\tDistance\\n"
-formatted_string = ""
 
-for klucz in klucze_sorted:
-    try:
-        formatted_string += f"{identified_profile[klucz]}\\t"
-    except KeyError:
-        formatted_string += f"-1\\t" 
+with open('MLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
+    f3.write(f'ST\\t{all_loci_names}\\n')
+    f3.write(f'{matching_ST}\\t{matching_ST_profile}\\n')
 
-formated_string_external_profile = []
-
-for klucz in klucze_sorted:
-    formated_string_external_profile.append(str(known_profiles[matching_ST][klucz]))
-
-formated_string_external_profile = "\\t".join(formated_string_external_profile)
-
-with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_allels.txt', 'w') as f2, open('MLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
+with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_allels.txt', 'w') as f2:
     if min_value == 0:
         f1.write(f'ST_sample\\tST_database\\tDistance\\tComment\\n')
         f1.write(f'{matching_ST}\\t{matching_ST}\\t{min_value}\\tIn external database\\n')
 
-        f2.write(f'ST\\t{klucze_sorted_string}\\n')
-        f2.write(f'{matching_ST}\\t{formatted_string}\\n')
+        f2.write(f'ST\\t{all_loci_names}\\n')
+        f2.write(f'{matching_ST}\\t{sample_profile}\\n')
 
-        f3.write(f'ST\\t{klucze_sorted_string}\\n')
-        f3.write(f'{matching_ST}\\t{formated_string_external_profile}\\n')
     else:
         # Unknown profile
         # Check if this profile is in a "local" database and if not create a new entry
         known_profiles_local, klucze_sorted_local = create_profile(f'{sciezka}/local/profiles_local.list')
-        matching_ST_local, min_value_local, allele_list_lowest_difference_local, _ = getST(MLSTout = identified_profile, \
-                                                                                        profile_file = f'{sciezka}/local/profiles_local.list')
+        matching_ST_local, min_value_local, matching_ST_profile_local, _, _ =  getST(MLSTout = identified_profile, \
+                                                                               profile_file = f'{sciezka}/local/profiles_local.list')
     
         if min_value_local == 0:
             # found profile in local database
@@ -422,12 +403,9 @@ with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_a
             f1.write(f'ST_sample\\tST_database\\tDistance\\tComment\\n')
             f1.write(f'{matching_ST_local}\\t{matching_ST}\\t{min_value}\\tIn local database\\n')
 
-            f2.write(f'ST\\t{klucze_sorted_string}\\n')
-            f2.write(f'{matching_ST_local}\\t{formatted_string}\\n')
+            f2.write(f'ST\\t{all_loci_names}\\n')
+            f2.write(f'{matching_ST_local}\\t{sample_profile}\\n')
 
-            
-            f3.write(f'ST\\t{klucze_sorted_string}\\n')
-            f3.write(f'{matching_ST}\\t{formated_string_external_profile}\\n')
         else:
             # new profile appending it to local database with new number  
             last_ST = 0
@@ -437,19 +415,14 @@ with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_a
                     if 'local' in line[0]:
                         last_ST = line[0].split('_')[1]
             novel_profile_ST = f'local_{int(last_ST)+1}'
-            to_save = "\t".join(map(str, sample_profile))
-            write_novel_sample(f'{novel_profile_ST}\\t{to_save}\\n', f'{sciezka}/local/profiles_local.list')
+
+            write_novel_sample(f'{novel_profile_ST}\\t{sample_profile}\\n', f'{sciezka}/local/profiles_local.list')
             
             f1.write(f'ST_sample\\tST_database\\tDistance\\tComment\\n')
             f1.write(f'{novel_profile_ST}\\t{matching_ST}\\t{min_value}\\tNovel in local database\\n')
 
-            f2.write(f'ST\\t{klucze_sorted_string}\\n')
-            f2.write(f'{novel_profile_ST}\\t{formatted_string}\\n')
-
-
-            f3.write(f'ST\\t{klucze_sorted_string}\\n')
-            f3.write(f'{matching_ST}\\t{formated_string_external_profile}\\n')
-
+            f2.write(f'ST\\t{all_loci_names}\\n')
+            f2.write(f'{novel_profile_ST}\\t{sample_profile}\\n')
 
 """
 }
@@ -462,12 +435,12 @@ process run_Seqsero {
   cpus params.cpus
   maxForks 15
   input:
-  tuple val(x), path(fasta)
+  tuple val(x), path(fasta), val(SPECIES)
   output:
   tuple val(x), path('seqsero_out/SeqSero_result.txt')
   // To jako ciekawostka w dokumentacji jednak rekomenduja uzywania if-a w main workflow
-  // when:
-  // params.species == 'Salmonella'
+  when:
+  SPECIES =~ /Salmo*/
   script:
   """
   # -m to rodzaj algorytmu -m to chyba opart o k-mery
@@ -485,9 +458,11 @@ process run_sistr {
   cpus params.cpus
   maxForks 15
   input:
-  tuple val(x), path(fasta)
+  tuple val(x), path(fasta), val(SPECIES)
   output:
   tuple val(x), path('sistr-output.tab')
+  when:
+  SPECIES =~ /Salmo*/
   script:
   // Uwaga sistr korzysta z WLASNEJ BAZY do pobrania z 
   // SISTR_DB_URL = 'https://sairidapublic.blob.core.windows.net/downloads/sistr/database/SISTR_V_1.1_db.tar.gz'
@@ -515,9 +490,11 @@ process run_ecotyper {
   cpus params.cpus
   maxForks 15
   input:
-  tuple val(x), path(fasta)
+  tuple val(x), path(fasta), val(SPECIES)
   output:
   tuple val(x), path('ectyper_out/*')
+  when:
+  SPECIES =~ /Esche*/
   script:
   """
   # opcje sa oczywisete -i to input, -c to liczba core'ow -hpid to minimalny seq identity dla antygenu H ustawiam na 90 z default (95) 
@@ -627,11 +604,12 @@ sys.path.append('/data')
 from all_functions_salmonella import *
 
 species="$SPECIES"
+
 if re.findall('Salmo', species):
     sciezka='/Genus/cgMLST_v2'
 elif re.findall('Esch', species):
     sciezka='/Genus/cgMLST_v1'
-elif species in ['jejuni']:
+elif species == 'jejuni':
     sciezka='/Genus/jejuni/cgMLST_v2'
 else:
     with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_of_allels.txt', 'w') as f2, open('cgMLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
@@ -643,45 +621,40 @@ else:
 
         f3.write(f'ST\\tComment\\n')
         f3.write(f'unk\\tUnknown species')
-    sys.exit(1) 
-
-#known_profiles, klucze = create_profile(f'{sciezka}/profiles.list')
+    sys.exit(0) 
 
 identified_profile = parse_MLST_blastn('cgMLST.txt')
-matching_ST, min_value, allele_list_lowest_difference, sample_profile, locus_list = getST(MLSTout = identified_profile, \
-                                                                                           profile_file = f'{sciezka}/profiles.list')
 
+matching_ST, min_value,  matching_ST_profile, sample_profile, all_loci_names = getST(MLSTout = identified_profile, \
+                                                                                     profile_file = f'{sciezka}/profiles.list')
 
-locus_list_str = "\\t".join(locus_list)
-allele_list_lowest_difference_str = "\\t".join(list(map(str, allele_list_lowest_difference)))
-sample_profile_str = "\\t".join(list(map(str, sample_profile)))
+# Write info regarding closest ST from EXTERNAL database
+with open('cgMLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
+    f3.write(f'ST\\t{all_loci_names}\\n')
+    f3.write(f'{matching_ST}\\t{matching_ST_profile}\\n')
 
-with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_of_allels.txt', 'w') as f2, open('cgMLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
+with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_of_allels.txt', 'w') as f2:
+
+    # for f1 and f2 the only difference is ST assigned to the sample
+        
     if min_value == 0:
         f1.write(f'ST_sample\\tST_database\\tDistance\\tComment\\n')
         f1.write(f'{matching_ST}\\t{matching_ST}\\t{min_value}\\tIn external database\\n')
 
-        f2.write(f'ST\\t{locus_list_str}\\n')
-        f2.write(f'{matching_ST}\\t{sample_profile_str}\\n')
-
-        f3.write(f'ST\\t{locus_list_str}\\n')
-        f3.write(f'{matching_ST}\\t{allele_list_lowest_difference_str}\\n')
-        sample_ST_final_id=matching_ST
+        f2.write(f'ST\\t{all_loci_names}\\n')
+        f2.write(f'{matching_ST}\\t{sample_profile}\\n')
    
     else:
         # look for a profile in "local" database 
-        matching_ST_local, min_value_local, allele_list_lowest_difference_local, _, _ = getST(MLSTout = identified_profile,
-                                                                                             profile_file = f'{sciezka}/local/profiles_local.list')
+        matching_ST_local, min_value_local, matching_ST_profile_local, _, _ = getST(MLSTout = identified_profile,
+                                                                                    profile_file = f'{sciezka}/local/profiles_local.list')
         if min_value_local == 0:
             f1.write(f'ST_sample\\tST_database\\tDistance\\tComment\\n')
             f1.write(f'{matching_ST_local}\\t{matching_ST}\\t{min_value}\\tIn local database\\n')
 
-            f2.write(f'ST\\t{locus_list_str}\\n')
-            f2.write(f'{matching_ST_local}\\t{sample_profile_str}\\n')
+            f2.write(f'ST\\t{all_loci_names}\\n')
+            f2.write(f'{matching_ST_local}\\t{sample_profile}\\n')
 
-            f3.write(f'ST\\t{locus_list_str}\\n')
-            f3.write(f'{matching_ST_local}\\t{allele_list_lowest_difference_str}\\n')
-            sample_ST_final_id=matching_ST_local
         else:
             # new allelic profile not present in either external or local databases
             last_ST = 0
@@ -693,19 +666,15 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
         
         
             novel_profile_ST = f'local_{int(last_ST)+1}'
-            to_save = "\t".join(map(str, sample_profile))
+            
             write_novel_sample(f'{novel_profile_ST}\\t{to_save}\\n', f'{sciezka}/local/profiles_local.list')
         
             f1.write(f'ST_sample\\tST_database\\tDistance\\tComment\\n')
             f1.write(f'{novel_profile_ST}\\t{matching_ST}\\t{min_value}\\tNovel in local database\\n')
 
-            f2.write(f'ST\\t{klucze_sorted_string}\\n')
-            f2.write(f'{novel_profile_ST}\\t{sample_profile_str}\\n')
+            f2.write(f'ST\\t{all_loci_names}\\n')
+            f2.write(f'{novel_profile_ST}\\t{sample_profile}\\n')
 
-
-            f3.write(f'ST\\t{klucze_sorted_string}\\n')
-            f3.write(f'{matching_ST}\\t{allele_list_lowest_difference_str}\\n')
-            sample_ST_final_id=novel_profile_ST
 """
 }
 
@@ -757,24 +726,31 @@ process run_VFDB {
   maxForks 5
   input:
   // inputem jest output procesu run_prokka
-  tuple val(x), path(gff), path(faa), path(ffn), path(tsv)
+  tuple val(x), path(gff), path(faa), path(ffn), path(tsv), val(SPECIES)
   output:
   tuple val(x), path('VFDB_summary*txt'), emit: non_ecoli
   tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), emit: ecoli
   script:
   """
   SPEC2=""
-  if [ ${params.species} == 'Salmonella' ]; then
-      SPEC="Salmonella" # wpradzie jest juz paramter params.species, ale baza VFDB go nie zrozumie.
+  CAMPYLO_SPECIES='concisus fetus helveticus hyointestinalis insulaenigrae jejuni lanienae lari sputorum upsaliensis' 
+  if [[ "${SPECIES}" == *"Salmo"* ]]; then
+      SPEC="Salmonella" 
       touch VFDB_summary_Escherichia.txt
       touch VFDB_summary_Shigella.txt
-  elif [ ${params.species} == 'Escherichia' ]; then
+  elif [[ "${SPECIES}" == *"Esche"* ]]; then
       # typy EIEC jest w bazie VFDB jako Shigella
       SPEC="Escherichia"
-      SPEC2="Shigella"
-  elif [ ${params.species} == 'Campylobacter' ]; then
+      SPEC2="Shigella"  
+  elif [[ \${CAMPYLO_SPECIES[@]} =~ "${SPECIES}" ]]; then
+      touch VFDB_summary_Escherichia.txt
+      touch VFDB_summary_Shigella.txt
       SPEC="Campylobacter"
-  fi 
+  else
+      touch VFDB_summary_Escherichia.txt
+      touch VFDB_summary_Shigella.txt
+  fi
+
   PIDENT=80 # minimalna identycznosc sekwencyjna aby stwierdzic ze jest hit 
   COV=80 # minimalne pokrycie query i hitu aby stwierdzic ze jest hit 
   EVAL=0.01  # maksymalne e-value
@@ -794,9 +770,11 @@ process parse_VFDB_ecoli {
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   cpus params.cpus
   input:
-  tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt')
+  tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), val(SPECIES)
   output:
   tuple val(x), path('VFDB_phenotype.txt')
+  when:
+  SPECIES =~ /Escher*/
   script:
   """
     touch VFDB_phenotype.txt
@@ -848,7 +826,6 @@ process parse_VFDB_ecoli {
     AGGR=`cat VFDB_summary_Escherichia.txt | grep -w aggR | grep -v BRAK | wc -l`
     AAIC=`cat VFDB_summary_Escherichia.txt | grep -w aaic-hcp |  grep -v BRAK | wc -l`
  
-      
     if [ \${AGGR} -gt 0 ] && [ \${AAIC} -gt 0 ] ; then 
       echo -e "EAEC\\taggR\\taaiC" >> VFDB_phenotype.txt
     elif [ \${AGGR} -gt 0 ]; then
@@ -858,7 +835,6 @@ process parse_VFDB_ecoli {
     fi
 
     ### Konice
-
 
     ### EIEC ###
     ### Tu jest prosta definicaja ale gen jest nie w bazie Ecoli a w bazie Shigella
@@ -890,7 +866,7 @@ process parse_VFDB_ecoli {
 
     ### Koniec  
   """
-  }
+}
 
 process run_spifinder {
   // works only for salmonella
@@ -900,9 +876,11 @@ process run_spifinder {
   // cpus params.cpus
   // maxForks 5
   input:
-  tuple val(x), path(fasta)
+  tuple val(x), path(fasta), val(SPECIES)
   output:
   tuple val(x), path('spifinder_results/*')
+  when:
+  SPECIES =~ /Salmo*/
   script:
   """
   mkdir spifinder_results # program wymaga tworzenia katalogu samodzielnie
@@ -917,7 +895,7 @@ process run_spifinder {
 
 
 // process run_virulencefinder {
-//
+// TO DO
 //}
 
 process run_kraken2_illumina {
@@ -1008,26 +986,6 @@ process run_kmerfinder_illumina {
   """
 }
 
-process run_kmerfinder_nanopore {
-  tag "kmerfinder:${x}"
-  container  = 'salmonella_illumina:2.0'
-  publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results*"
-  containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
-  maxForks 5
-  cpus params.cpus
-  input:
-  tuple val(x), path(reads)
-
-  output:
-  tuple val(x),path('results.spa'), path('results.txt')
-
-  script:
-  """
-  /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
-  cp kmerfider_out/results.spa .
-  cp kmerfider_out/results.txt .
-  """
-}
 
 process run_pHierCC_enterobase {
   // Funkcja odpytuje API Enterobase w celu wyciagniecia profuili z tej bazu
@@ -1040,7 +998,7 @@ process run_pHierCC_enterobase {
   input:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES)
   output:
-  tuple val(x), path('parsed_phiercc_enterobase.txt')
+  tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES)
   script:
 """
 #!/usr/bin/python
@@ -1095,9 +1053,8 @@ elif re.findall('Escher', species):
 else:
     with open('parsed_phiercc_enterobase.txt', 'w') as f:
         f.write('Provided species: {species} is not part of the Enterobase')
-    sys.exit(1)
+    sys.exit(0)
 
-# Tworzenie lokalnych plikow wynikowych
 with open('parsed_phiercc_enterobase.txt', 'w') as f:
     f.write(phiercc_header)
     address = f"https://enterobase.warwick.ac.uk/api/v2.0/{DATABASE}/{scheme_name}/sts?st_id={ST_matching}&scheme={scheme_name}&limit=5"
@@ -1115,6 +1072,7 @@ with open('parsed_phiercc_enterobase.txt', 'w') as f:
         f.write(f'{ST_sample}\\t{formatted_string}\\n')
     except HTTPError as Response_error:
         print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
+        sys.exit(1)
 
 """
 }
@@ -1173,7 +1131,7 @@ else:
     with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f1, open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f2:
         f1.write('Provided species: {species} is not part of any cgMLST scheme')
         f2.write('Provided species: {species} is not part of any cgMLST scheme')
-        sys.exit(1)
+        sys.exit(0)
 
 # 1. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
 with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f, gzip.open(f'{directory}/profile_single_linkage.HierCC.gz') as f2, open(f'{directory}/profile_single_linkage.HierCC.index') as f3:
@@ -1254,24 +1212,23 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f, gzip.open(f'{di
 """
 }
 
-process extract_historical_data {
-  // W przypadku znalezienia ST ktory jest  bazie enterobase
-  // Wyciagamy informacje gdzie i kiedy byly zebrane probki z tym ST
-  // Generalnie rozszerzenie o pytania o ST na konkretnym poziomie hierCC
-  // mozna latwo doimplementowac, choc wymagaja dodatkowe odpytania bazy w tablei 'STs'
-  // tabela straindata zawierajaca informacje o ST nie zawiera informacji o phierCC 
+process extract_historical_data_enterobase {
   container  = 'salmonella_illumina:2.0'
   tag "Extracting historical data for sample $x"
-  containerOptions "--volume ${params.Enterobase_db_absolute_path_on_host}:/Enterobase"
+  containerOptions "--volume ${params.genus_db_absolute_path_on_host}/Enterobase:/Enterobase"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
-  tuple val(x), path('parsed_phiercc_enterobase.txt'), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt')
+  tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES)
   output:
   tuple val(x), path('enterobase_historical_data.txt')
+  when:
+  SPECIES =~ /Salmo*/ ||  SPECIES =~ /Escher*/  
   script:
 """
 #!/usr/bin/python
 import numpy as np
+import sys
+
 def get_hiercc_level(my_file):
     with open(my_file) as f:
         i = 0
@@ -1283,17 +1240,21 @@ def get_hiercc_level(my_file):
             i+=1
     slownik = {x:y for x,y in zip(klucze,wartosci)}
     return slownik
-# Tutaj mamy informacje o poziomach mojej probki
+
+# we keep the data as a dict with "level" i.e. 'HC2' as a key and cluster id i.e. 40 as value
 slownik_hiercc = get_hiercc_level('parsed_phiercc_enterobase.txt')
 
-# Szukamy strainow o takim wspolnym poziomie, to powinno byc user defined
-phiercc_level_userdefined = '5'
+# As a default we look for all the strains that belong to the same cluster at THIS level
+# BE AWARE THAT SOMETIMES KEYS HAVE STRANGE NOTATION LIKE "HC1100(cgST Cplx)", THIS WANT WORK IN THAT CASE
+try:
+    phiercc_level_userdefined = '5'
+    common_STs = slownik_hiercc[f'HC{phiercc_level_userdefined}']
+except KeyError:
+    print('Provided key does not exist')
+    sys.exit(0)
 
-
-common_STs = slownik_hiercc[f'HC{phiercc_level_userdefined}']
-
-# teraz lecimy po tablicy STs i szukamy ST z pozioem jak common_STs na poziomie phiercc_level_userdefined
-
+# Now we look for ALL STs belonging to the same cluster as our cluster given phiercc_level
+# for that we query our local enterobase instance
 expected_ST = {}
 STs = np.load('/Enterobase/sts_table.npy', allow_pickle=True)
 STs = STs.item()
@@ -1303,13 +1264,9 @@ for klucz,wartosc in STs.items():
         expected_ST[klucz] = ''
     		
 
-# na tym etapie znamy STs ktore na poziomie phiercc_level_userdefined maja wartosc common_STs
-# te STs sa znane w tablicy straindata
-
 straindata = np.load('/Enterobase/straindata_table.npy',  allow_pickle=True)
 straindata = straindata.item()
 
-# niestety lecimy po wszystkich elementach w straindata
 dane_historyczne = {} # kluczem jest nazwa szczepu , wartoscia 2 elementowa lista z krajem i rokiem
 for strain, wartosc in straindata.items():
     for scheme in wartosc['sts']:
@@ -1330,7 +1287,7 @@ process run_amrfinder {
   publishDir "pipeline_wyniki/${x}/AMRplus_fider", mode: 'copy', pattern: "AMRfinder*"
   containerOptions "--volume ${params.AMRFINDER_db_absolute_path_on_host}:/AMRfider"
   input:
-  tuple val(x), path(fasta)
+  tuple val(x), path(fasta), val(SPECIES)
   output:
   tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt')
   // -n input, plik z sekwencja nukleotydowa
@@ -1345,14 +1302,19 @@ process run_amrfinder {
   // Te z etoki sa za stare 
   script:
   """
-  if [ ${params.species} == 's.enterica' ]; then
-      SPEC="Salmonella" # wpradzie jest juz paramter params.species, ale baza VFDB go nie zrozumie.
-  elif [ ${params.species} == 'e.coli' ]; then
-      SPEC="Escherichia"
-  elif [ ${params.species} == 'c.jejuni' ]; then
+  CAMPYLO_SPECIES='concisus fetus helveticus hyointestinalis insulaenigrae jejuni lanienae lari sputorum upsaliensis'
+  if [[ "${SPECIES}" == *"Salmo"* ]]; then
+    SPEC="Salmonella"
+  elif [[ "${SPECIES}" == *"Escher"* ]]; then
+     SPEC="Escherichia"
+  elif [[ \${CAMPYLO_SPECIES[@]} =~ "${SPECIES}" ]]; then  
       SPEC="Campylobacter"
-  fi
+  else
+     echo "Unknown species provided to AMRfinder: ${SPECIES}" >> AMRfinder_resistance.txt
+     echo "Unknown species provided to AMRfinder: ${SPECIES}" >> AMRfinder_virulence.txt
+  fi 
   amrfinder --blast_bin /blast/bin -n $fasta -d /AMRfider  -i 0.9 -c 0.5 -o initial_output.txt -O \${SPEC} --plus
+  
   cat initial_output.txt | grep -w AMR >> AMRfinder_resistance.txt
   cat initial_output.txt | grep -w VIRULENCE >> AMRfinder_virulence.txt
 
@@ -1385,6 +1347,63 @@ process run_plasmidfinder {
   mkdir plasmidfinder_results # program wymaga tworzenia katalogu samodzielnie
   /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder_results -p /opt/docker/plasmidfinder_db -l 0.6 -t 0.9 -x
   """
+}
+
+
+process get_species_illumina {
+// Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
+tag "Predicting species for ${x}"
+
+input:
+tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genus.txt'), path('Summary_kraken_species.txt'), path('report_metaphlan_SGB.txt'), path('report_metaphlan_species.txt'), path('report_metaphlan_genra.txt'),  path('results.spa'), path('results.txt')
+
+output:
+tuple val(x), env(FINALE_SPECIES), emit: species
+
+script:
+"""
+PRE_FINALE_SPECIES=""
+cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
+cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1}' | sed s'/s__//'g | sed s'/_/ /'g >> intermediate.txt
+cat results.spa  | grep -v "#" | head -1 | cut -f1 | cut -d " " -f2,3 >> intermediate.txt
+PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
+
+
+if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then
+    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
+elif [[ "\${PRE_FINALE_SPECIES}" == *"Escher"* || "\${PRE_FINALE_SPECIES}" == *"Shigella"* ]]; then
+    FINALE_SPECIES="Escherichia coli"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter coli" ]]; then
+    FINALE_SPECIES="jejuni"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter jejuni" ]]; then
+    FINALE_SPECIES="jejuni"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter concisus" ]]; then
+    FINALE_SPECIES="concisus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter curvus" ]]; then
+    FINALE_SPECIES="concisus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter fetus" ]]; then
+    FINALE_SPECIES="fetus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter helveticus" ]]; then
+    FINALE_SPECIES="helveticus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter hyointestinalis" ]]; then
+    FINALE_SPECIES="hyointestinalis"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter insulaenigrae" ]]; then
+    FINALE_SPECIES="insulaenigrae"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lanienae" ]]; then
+    FINALE_SPECIES="lanienae"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lari" ]]; then
+    FINALE_SPECIES="lari"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
+    FINALE_SPECIES="sputorum"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
+    FINALE_SPECIES="upsaliensis"
+else
+    FINALE_SPECIES="unk"
+fi
+
+echo \${FINALE_SPECIES} >> predicte_species.txt
+
+"""
 }
 
 // FUNKCJE DODANE DLA ANALIZY NANOPORE //
@@ -1560,7 +1579,7 @@ process run_kraken2_nanopore {
   tuple val(x), path(reads)
 
   output:
-  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('summary_kraken.txt')
+  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genus.txt'), path('Summary_kraken_species.txt')
 
   script:
   """
@@ -1577,11 +1596,92 @@ process run_kraken2_nanopore {
   ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
   ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
 
-  echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> summary_kraken.txt
+  echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> Summary_kraken_genus.txt
+
+  LEVEL="S"
+  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
+  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
+  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
+  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
+
+  echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> Summary_kraken_species.txt
   """
 }
 
+process run_kmerfinder_nanopore {
+  tag "kmerfinder:${x}"
+  container  = 'salmonella_illumina:2.0'
+  publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results*"
+  containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
+  maxForks 5
+  cpus params.cpus
+  input:
+  tuple val(x), path(reads)
 
+  output:
+  tuple val(x),path('results.spa'), path('results.txt')
+
+  script:
+  """
+  /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+  cp kmerfider_out/results.spa .
+  cp kmerfider_out/results.txt .
+  """
+}
+
+process get_species_nanopore {
+// Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
+tag "Predicting species for ${x}"
+
+input:
+tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genus.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt')
+
+output:
+tuple val(x), env(FINALE_SPECIES), emit: species
+
+script:
+"""
+PRE_FINALE_SPECIES=""
+cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
+cat results.spa  | grep -v "#" | head -1 | cut -f1 | cut -d " " -f2,3 >> intermediate.txt
+PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
+
+if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then
+    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
+elif [[ "\${PRE_FINALE_SPECIES}" == *"Escher"* || "\${PRE_FINALE_SPECIES}" == *"Shigella"* ]]; then
+    FINALE_SPECIES="Escherichia coli"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter coli" ]]; then
+    FINALE_SPECIES="jejuni"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter jejuni" ]]; then
+    FINALE_SPECIES="jejuni"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter concisus" ]]; then
+    FINALE_SPECIES="concisus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter curvus" ]]; then
+    FINALE_SPECIES="concisus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter fetus" ]]; then
+    FINALE_SPECIES="fetus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter helveticus" ]]; then
+    FINALE_SPECIES="helveticus"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter hyointestinalis" ]]; then
+    FINALE_SPECIES="hyointestinalis"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter insulaenigrae" ]]; then
+    FINALE_SPECIES="insulaenigrae"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lanienae" ]]; then
+    FINALE_SPECIES="lanienae"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lari" ]]; then
+    FINALE_SPECIES="lari"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
+    FINALE_SPECIES="sputorum"
+elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
+    FINALE_SPECIES="upsaliensis"
+else
+    FINALE_SPECIES="unk"
+fi
+
+echo \${FINALE_SPECIES} >> predicte_species.txt
+
+"""
+}
 
 // SUB WORKFLOWS NANOPORE //
 
@@ -1727,64 +1827,6 @@ emit:
 extract_final_contigs_out.ONLY_GENOME
 }
 
-process get_species_illumina {
-// Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
-tag "Predicting species for ${x}"
-
-input:
-tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genus.txt'), path('Summary_kraken_species.txt'), path('report_metaphlan_SGB.txt'), path('report_metaphlan_species.txt'), path('report_metaphlan_genra.txt'),  path('results.spa'), path('results.txt')
-
-output:
-tuple val(x), env(FINALE_SPECIES), emit: species
-
-script:
-"""
-PRE_FINALE_SPECIES=""
-cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
-cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1}' | sed s'/s__//'g | sed s'/_/ /'g >> intermediate.txt
-cat results.spa  | grep -v "#" | head -1 | cut -f1 | cut -d " " -f2,3 >> intermediate.txt
-PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
-
-
-# FINALE_SPECIES jest potrzebne tylko do okreslenia poprawnej sciezki do baz
-# NIE jest to informacja zwracana uzytkownikowi
-
-if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then 
-    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
-elif [[ "\${PRE_FINALE_SPECIES}" == *"Escher"* || "\${PRE_FINALE_SPECIES}" == *"Shigella"* ]]; then
-    FINALE_SPECIES="Escherichia coli"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter coli" ]]; then
-    FINALE_SPECIES="jejuni"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter jejuni" ]]; then
-    FINALE_SPECIES="jejuni"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter concisus" ]]; then
-    FINALE_SPECIES="concisus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter curvus" ]]; then
-    FINALE_SPECIES="concisus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter fetus" ]]; then
-    FINALE_SPECIES="fetus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter helveticus" ]]; then
-    FINALE_SPECIES="helveticus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter hyointestinalis" ]]; then
-    FINALE_SPECIES="hyointestinalis"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter insulaenigrae" ]]; then
-    FINALE_SPECIES="insulaenigrae"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lanienae" ]]; then
-    FINALE_SPECIES="lanienae"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lari" ]]; then
-    FINALE_SPECIES="lari"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
-    FINALE_SPECIES="sputorum"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
-    FINALE_SPECIES="upsaliensis"
-else
-    FINALE_SPECIES="unk"
-fi
-
-echo \${FINALE_SPECIES} >> predicte_species.txt
-
-"""
-}
 
 workflow predict_species_illumina {
 // Workflow puszcza 3 programy (kraken2, metaphlan i kmerfinder)
@@ -1809,19 +1851,31 @@ emit:
 final_species.species
 }
 
-// TO DO
-// workflow predict_species_nanopore {
-// Workflow puszcza 3 programy (kraken2, metaphlan i kmerfinder)
-// jego celem jest zwrocenie informacji o gatunku (tak naprawde wazne tylko dla Campylo)
-// tak bym nizej mogl okreslic poprawnie baze
-// }
+workflow predict_species_nanopore {
+// Workflow puszcza 2 programy (kraken2,  kmerfinder)
+// Metaphlan puszcza bowtie2 ktoru jest dla krtokich odczytow
+take:
+initial_fastq
+main:
+// kraken
+kraken2_out = run_kraken2_nanopore(initial_fastq)
 
+// Kmerfinder
+kmerfinder_out = run_kmerfinder_nanopore(initial_fastq)
+
+programs_out = kraken2_out.join(kmerfinder_out,  by : 0, remainder : true)
+final_species = get_species_nanopore(programs_out)
+emit:
+final_species.species
+
+}
 // MAIN WORKFLOW //
 
 workflow {
 
 // Get data
 if(params.machine == 'Illumina') {
+
 Channel
   .fromFilePairs(params.reads)
   .set {initial_fastq}
@@ -1834,7 +1888,6 @@ predict_species_out = predict_species_illumina(initial_fastq)
 
 // FASTQ trimming
 processed_fastq = clean_fastq_illumina(initial_fastq)
-
 
 // Initial scaffold
 initial_scaffold = spades(processed_fastq.All_path)
@@ -1860,12 +1913,7 @@ Channel
 run_fastqc_nanopore(initial_fastq)
 
 // Contaminations/subspecies prediction
-// // Kraken2
-
-run_kraken2_nanopore(initial_fastq)
-
-// // Kmerfinder
-run_kmerfinder_nanopore(initial_fastq)
+predict_species_out = predict_species_nanopore(initial_fastq)
 
 // FASTQ trimming
 processed_fastq = clean_fastq_nanopore(initial_fastq)
@@ -1876,9 +1924,6 @@ initial_scaffold = run_flye(processed_fastq)
 // one round of assembly polishing with medaka
 final_assembly = polishing_with_medaka(initial_scaffold, processed_fastq)
 
-} else {
-  println("Incorrect option provided")
-  System.exit(0)
 }
 
 
@@ -1893,41 +1938,31 @@ parse_7MLST(MLST_out)
 
 cgMLST_out = run_cgMLST(final_assembly_with_species)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
-if ( params.species  == 'Escherichia' || params.species  == 'Salmonella') {
-run_pHierCC_enterobase(parse_cgMLST_out)
-}
 run_pHierCC_local(parse_cgMLST_out)
-// run_pHierCC_out = run_pHierCC(parse_cgMLST_out)
-// extract_historical_data(run_pHierCC_out)
+
+run_pHierCC_enterobase_out = run_pHierCC_enterobase(parse_cgMLST_out)
+extract_historical_data_enterobase(run_pHierCC_enterobase_out)
+
 
 // AMR predictions
 run_resfinder(final_assembly_with_species)
-// run_amrfinder(final_assembly)
+run_amrfinder(final_assembly_with_species)
 
 // plasmids
 run_plasmidfinder(final_assembly)
 
 // Virulence
 prokka_out = run_prokka(final_assembly)
-VFDB_out=run_VFDB(prokka_out)
+VFDB_out=run_VFDB(prokka_out.join(predict_species_out, by : 0))
 
-// E.coli OH and phenotype
-if ( params.species  == 'Escherichia' ) {
-run_ecotyper(final_assembly)
-parse_VFDB_ecoli(VFDB_out.ecoli)
-}
+// These three modules have "when" instructions and works only for Escher
+run_ecotyper(final_assembly_with_species)
+parse_VFDB_ecoli(VFDB_out.ecoli.join(predict_species_out, by : 0))
 
-// Salmonella OH and virulence factors
-if ( params.species  == 'Salmonella' ) {
-run_spifinder(final_assembly)
-run_Seqsero(final_assembly)
-run_sistr(final_assembly)
-}
-
-
-// if ( params.species  == 'Campylobacter' ) {
-// To implement
-// }
+// These three modules have "when" instructions and works only for Salmonella
+run_spifinder(final_assembly_with_species)
+run_Seqsero(final_assembly_with_species)
+run_sistr(final_assembly_with_species)
 
 } 
 
