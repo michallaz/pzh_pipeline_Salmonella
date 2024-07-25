@@ -1295,8 +1295,7 @@ process run_amrfinder {
   input:
   tuple val(x), path(fasta), val(SPECIES)
   output:
-  tuple val(x), path('initial_output.txt')
-  //tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt')
+  tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt')
   // -n input, plik z sekwencja nukleotydowa
   // -d input, sciezka do bazy AMRfindera 
   // -i input, seq identity miedzy targetem a query
