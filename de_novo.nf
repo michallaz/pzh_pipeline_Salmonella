@@ -1228,7 +1228,8 @@ process extract_historical_data_enterobase {
 #!/usr/bin/python
 import numpy as np
 import sys
-
+import re 
+species="${SPECIES}"
 def get_hiercc_level(my_file):
     with open(my_file) as f:
         i = 0
@@ -1246,8 +1247,13 @@ slownik_hiercc = get_hiercc_level('parsed_phiercc_enterobase.txt')
 
 # As a default we look for all the strains that belong to the same cluster at THIS level
 # BE AWARE THAT SOMETIMES KEYS HAVE STRANGE NOTATION LIKE "HC1100(cgST Cplx)", THIS WANT WORK IN THAT CASE
-try:
-    phiercc_level_userdefined = '5'
+try: 
+    if re.findall('Salmo', species): 
+        phiercc_level_userdefined = '5'
+        scheme_name="cgMLST_v2"
+    elif re.findall('Escher', species):
+        phiercc_level_userdefined = '20' # Escherichia seems to be much more diverse
+        scheme_name="cgMLST"
     common_STs = slownik_hiercc[f'HC{phiercc_level_userdefined}']
 except KeyError:
     print('Provided key does not exist')
@@ -1270,7 +1276,7 @@ straindata = straindata.item()
 dane_historyczne = {} # kluczem jest nazwa szczepu , wartoscia 2 elementowa lista z krajem i rokiem
 for strain, wartosc in straindata.items():
     for scheme in wartosc['sts']:
-        if 'cgMLST_v2' in scheme.values() and str(scheme['st_id']) in expected_ST.keys():
+        if scheme_name in scheme.values() and str(scheme['st_id']) in expected_ST.keys():
             dane_historyczne[strain] = [wartosc['country'], wartosc['collection_year'], scheme['st_id']]  
 
 # zapisujemy dane
@@ -1289,7 +1295,8 @@ process run_amrfinder {
   input:
   tuple val(x), path(fasta), val(SPECIES)
   output:
-  tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt')
+  tuple val(x), path('initial_output.txt')
+  //tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt')
   // -n input, plik z sekwencja nukleotydowa
   // -d input, sciezka do bazy AMRfindera 
   // -i input, seq identity miedzy targetem a query
@@ -1302,6 +1309,7 @@ process run_amrfinder {
   // Te z etoki sa za stare 
   script:
   """
+  SPEC=""
   CAMPYLO_SPECIES='concisus fetus helveticus hyointestinalis insulaenigrae jejuni lanienae lari sputorum upsaliensis'
   if [[ "${SPECIES}" == *"Salmo"* ]]; then
     SPEC="Salmonella"
@@ -1312,11 +1320,12 @@ process run_amrfinder {
   else
      echo "Unknown species provided to AMRfinder: ${SPECIES}" >> AMRfinder_resistance.txt
      echo "Unknown species provided to AMRfinder: ${SPECIES}" >> AMRfinder_virulence.txt
-  fi 
-  amrfinder --blast_bin /blast/bin -n $fasta -d /AMRfider  -i 0.9 -c 0.5 -o initial_output.txt -O \${SPEC} --plus
-  
-  cat initial_output.txt | grep -w AMR >> AMRfinder_resistance.txt
-  cat initial_output.txt | grep -w VIRULENCE >> AMRfinder_virulence.txt
+  fi
+
+  amrfinder --blast_bin /blast/bin -n $fasta -d /AMRfider  -i 0.9 -c 0.5 -o initial_output.txt -O \${SPEC} --plus 
+ 
+  cat initial_output.txt  | awk 'BEGIN{FS="\\t"}; {if(\$9 == "AMR" || \$1 == "Protein identifier") print \$0}' > AMRfinder_resistance.txt
+  cat initial_output.txt  | awk 'BEGIN{FS="\\t"}; {if(\$9 == "VIRULENCE" || \$1 == "Protein identifier") print \$0}' > AMRfinder_virulence.txt
 
   """ 
 }
