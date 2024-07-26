@@ -1477,7 +1477,7 @@ process clean_fastq_nanopore {
   tuple val(x), path('prep_out_L1_SE.fastq.gz')
   script:
   """
-  python /opt/docker/EToKi/EToKi.py prepare --se ${read} -c ${params.cpus} -q 5 -p ${params.quality}
+  python /opt/docker/EToKi/EToKi.py prepare --se ${read} -c ${params.cpus} -q ${params.quality} -p prep_out 
   """
 }
 
@@ -1739,7 +1739,7 @@ final_assembly = run_medaka(single_bams_and_genome)
 for_remaping_polished_assembly = final_assembly.join(processed_fastq_inner_SE, by : 0, remainder : true)
 single_bams_and_polished_genome = run_minimap2_2nd(for_remaping_polished_assembly)
 
-final_assembly_filtered = run_coverage(single_bams_and_polished_genome)
+final_assembly_filtered = extract_final_contigs(single_bams_and_polished_genome)
 
 emit:
 // sub pipeline zwraca identyfikator probki + nowy scaffold
