@@ -1220,7 +1220,7 @@ process extract_historical_data_enterobase {
   input:
   tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES)
   output:
-  tuple val(x), path('enterobase_historical_data.txt')
+  tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES)
   when:
   SPECIES =~ /Salmo*/ ||  SPECIES =~ /Escher*/  
   script:
@@ -1282,9 +1282,30 @@ for strain, wartosc in straindata.items():
 # zapisujemy dane
 with open('enterobase_historical_data.txt', 'w') as f:
     f.write(f'Strain_id\\tCountry\\tYear\\tST\\n')
-    for klucz, wartosc in dane_historyczne.items(): 
-        f.write(f'{klucz}\\t{wartosc[0]}\\t{wartosc[1]}\\t{wartosc[2]}\\n')
+    for klucz, wartosc in dane_historyczne.items():
+        if wartosc[0] == 'United States':
+            f.write(f'{klucz}\\tUnited States of America\\t{wartosc[1]}\\t{wartosc[2]}\\n')
+        else:
+            f.write(f'{klucz}\\t{wartosc[0]}\\t{wartosc[1]}\\t{wartosc[2]}\\n')
 """
+}
+
+process plot_historical_data_enterobase {
+  container  = 'salmonella_illumina:2.0'
+  tag "Extracting historical data for sample $x"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
+  input:
+  tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES)
+  output:
+  tuple val(x), path('*html')
+  when:
+  SPECIES =~ /Salmo*/ ||  SPECIES =~ /Escher*/
+  script:
+// The script requires a geojeson file that is a part of our container 
+"""
+python /data/plot_historical_data.py enterobase_historical_data.txt enterobase_historical_data
+"""
+
 }
 
 process run_amrfinder {
@@ -1409,7 +1430,8 @@ else
     FINALE_SPECIES="unk"
 fi
 
-echo \${FINALE_SPECIES} >> predicte_species.txt
+
+echo \${FINALE_SPECIES} >> predicted_species.txt
 
 """
 }
@@ -1686,7 +1708,7 @@ else
     FINALE_SPECIES="unk"
 fi
 
-echo \${FINALE_SPECIES} >> predicte_species.txt
+echo \${FINALE_SPECIES} >> predicted_species.txt
 
 """
 }
@@ -1949,8 +1971,8 @@ parse_cgMLST_out = parse_cgMLST(cgMLST_out)
 run_pHierCC_local(parse_cgMLST_out)
 
 run_pHierCC_enterobase_out = run_pHierCC_enterobase(parse_cgMLST_out)
-extract_historical_data_enterobase(run_pHierCC_enterobase_out)
-
+extract_historical_data_enterobase_out = extract_historical_data_enterobase(run_pHierCC_enterobase_out)
+plot_historical_data_enterobase(extract_historical_data_enterobase_out)
 
 // AMR predictions
 run_resfinder(final_assembly_with_species)
