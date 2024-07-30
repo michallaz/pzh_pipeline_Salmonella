@@ -12,7 +12,7 @@ RUN apt-get update --fix-missing && apt upgrade -y && \
 
 RUN pip install ete3 numba numpy==1.23.4 biopython==1.73 psutil pysam cgecore packaging tables==3.7.0 h5py # pandas==1.0.5
 RUN pip install scikit-learn
-RUN pip install geodatasets geopandas folium
+RUN pip install geodatasets geopandas plotly
 # bez podania konkretnego numpy nie instaluje sie numba, sklearn w trakcie budowania zwraca error, a nastepnie i tak sie poprawnie instaluje
 WORKDIR /usr/bin
 RUN ln -s python3 python
@@ -330,7 +330,7 @@ RUN python3 setup.py install
 # Pobieramy bazy aby ectyper nie robil tego sam za kazdym razem
 RUN wget -O /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/assembly_summary_refseq.txt http://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt; wget -O  /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/refseq.genomes.k21s1000.msh https://gembox.cbcb.umd.edu/mash/refseq.genomes.k21s1000.msh
 
-COPY all_functions_salmonella.py run_blastn_ver11.sh run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py geojeson/ne_10m_admin_0_countries.geojson plot_historical_data.py  /data/
+COPY all_functions_salmonella.py run_blastn_ver11.sh run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py geojeson/ne_10m_admin_0_countries.geojson plot_historical_data_plotly.py  /data/
 WORKDIR /data
 CMD ["/bin/bash"]
 #ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]

@@ -32,14 +32,18 @@ white= "#ffffff"
 light_blue = "#dcf3fa"
 dark_blue = "#164452"
 cmap = mcolors.LinearSegmentedColormap.from_list("blue_gradient", [light_blue, dark_blue])
-if dataframe.Country.size <= 20:
+
+if dataframe.Country.size < 1:
+    # empty data but we need to produce something for nexflow
+    n_col = 2
+elif dataframe.Country.size <= 20:
     n_col = dataframe.Country.size + 1
 else:
     n_col = 20
 gradient_colors = [mcolors.to_hex(cmap(i / (n_col - 1))) for i in range(n_col)]
 
 # geojeson file within container
-dane = geopandas.read_file('ne_10m_admin_0_countries.geojson')
+dane = geopandas.read_file('/data/ne_10m_admin_0_countries.geojson')
 
 style_dict = {}
 

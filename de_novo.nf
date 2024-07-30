@@ -1363,7 +1363,7 @@ process plot_historical_data_enterobase {
   script:
 // The script requires a geojeson file that is a part of our container 
 """
-python /data/plot_historical_data.py enterobase_historical_data.txt enterobase_historical_data
+python /data/plot_historical_data_plotly.py enterobase_historical_data.txt enterobase_historical_data
 """
 
 }
