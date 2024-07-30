@@ -999,6 +999,8 @@ process run_pHierCC_enterobase {
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES)
   output:
   tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES)
+  when:
+  SPECIES =~ /Salmo*/ ||  SPECIES =~ /Escher*/ 
   script:
 """
 #!/usr/bin/python
@@ -1073,6 +1075,64 @@ with open('parsed_phiercc_enterobase.txt', 'w') as f:
     except HTTPError as Response_error:
         print(f"{Response_error.code} {Response_error.reason}. URL: {Response_error.geturl()}\\n Reason: {Response_error.read()}")
         sys.exit(1)
+
+"""
+}
+
+process run_pHierCC_pubmlst {
+  container  = 'salmonella_illumina:2.0'
+  containerOptions "--volume ${params.genus_db_absolute_path_on_host}:/Genus"
+  tag "Predicting hierCC with local database for sample $x"
+  publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
+  input:
+  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES)
+  output:
+  tuple val(x), path('parsed_phiercc_pubmlst.txt')
+  when:
+  SPECIES == 'jejuni'
+  script:
+"""
+#!/usr/bin/python
+import  sys
+import gzip
+import re
+import numpy as np
+
+def getST(my_file):
+    with open(my_file) as f:
+        for line in f:
+            line = line.rsplit()
+            if line[0] == "ST_sample":
+                # pass the first line
+                continue
+            else:
+                # the second line in a file is what we want
+                return line[0], line[1], int(line[2])
+
+species="$SPECIES"
+
+ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
+
+phiercc_header='ST\\tHC0\\tHC5\\tHC10\\tHC25\\tHC50\\tHC200\\n'
+lista_kluczy = ['d5', 'd10', 'd25', 'd50', 'd200']
+directory='/Genus/jejuni/pubmlst'
+
+
+STs_data = np.load(f'{directory}/sts_table.npy', allow_pickle=True).item() 
+
+# Matching ST must be in the data
+
+lista_poziomow = [STs_data[ST_matching][level] for level in lista_kluczy]
+try:
+    last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
+    lista_poziomow[:(last_index + 1)] = [ST_sample] * (last_index +1)
+except IndexError:
+    pass
+
+with open('parsed_phiercc_pubmlst.txt', 'w') as f:
+    f.write(phiercc_header)
+    formatted_string = "\t".join(list(map(str, lista_poziomow)))
+    f.write(f'{ST_sample}\\t{formatted_string}\\n')
 
 """
 }
@@ -1970,9 +2030,13 @@ cgMLST_out = run_cgMLST(final_assembly_with_species)
 parse_cgMLST_out = parse_cgMLST(cgMLST_out)
 run_pHierCC_local(parse_cgMLST_out)
 
-run_pHierCC_enterobase_out = run_pHierCC_enterobase(parse_cgMLST_out)
+run_pHierCC_enterobase_out = run_pHierCC_enterobase(parse_cgMLST_out) // for Salmo and Escher
+run_pHierCC_enterobase_out_pubmlst = run_pHierCC_pubmlst(parse_cgMLST_out) // only for jejuni
+
 extract_historical_data_enterobase_out = extract_historical_data_enterobase(run_pHierCC_enterobase_out)
 plot_historical_data_enterobase(extract_historical_data_enterobase_out)
+
+
 
 // AMR predictions
 run_resfinder(final_assembly_with_species)
