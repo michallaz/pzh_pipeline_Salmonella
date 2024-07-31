@@ -345,7 +345,7 @@ RUN cd /opt/docker/; \
 
 ###
 
-COPY all_functions_salmonella.py run_blastn_ver11.sh run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py geojeson/ne_10m_admin_0_countries.geojson plot_historical_data_plotly.py  /data/
+COPY all_functions_salmonella.py run_blastn_ver11.sh run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py geojeson/ne_10m_admin_0_countries.geojson plot_historical_data_plotly.py  parse_kmerfinder.py /data/
 WORKDIR /data
 CMD ["/bin/bash"]
 #ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]
