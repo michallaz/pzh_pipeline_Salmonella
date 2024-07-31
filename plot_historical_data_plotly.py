@@ -7,6 +7,8 @@ import time
 import plotly.express as px
 
 
+min_year_to_plot = int(sys.argv[3]) # only plot data fter this year  
+
 dataframe = pd.read_csv(sys.argv[1], sep = "\t", dtype = 'str', na_values = 'None')
 wynik = dataframe[['Country', 'Year']].groupby(['Country', 'Year']).size()
 max_value = wynik.max()
@@ -14,6 +16,11 @@ max_value = wynik.max()
 max_year = dataframe.Year.dropna().astype(int).max() + 1
 min_year = dataframe.Year.dropna().astype(int).min() - 1
 
+if min_year < min_year_to_plot:
+    min_year = min_year_to_plot
+
+if max_year < min_year_to_plot:
+    max_year = min_year_to_plot + 1
 
 # geojeson file within container
 dane = geopandas.read_file('/data/ne_10m_admin_0_countries.geojson')
@@ -48,7 +55,7 @@ if len(indexes) == 0:
     # no data in entorabase but we nned to draw something
     year_order = [2023, 2024]
     style_df = pd.DataFrame({'indexes':['76', '76'], 'year':[2023, 2024], 'wartosc':[0, 1]})
-    max_val = 1
+    max_val = 2
 else:
     style_df = pd.DataFrame({'indexes':indexes, 'year':years, 'wartosc':val})
     if style_df.wartosc.max() > 100:
@@ -67,7 +74,7 @@ fig = px.choropleth_mapbox(style_df, \
         color='wartosc', \
         locations = 'indexes', \
         animation_frame="year", \
-        range_color=(1, max_val),   \
+        range_color=(0, max_val),   \
         color_continuous_scale='Blues', \
         zoom=3, \
         center = {"lat": 48.0902, "lon": 2.7129}, \

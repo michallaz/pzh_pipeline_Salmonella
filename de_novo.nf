@@ -794,8 +794,9 @@ process parse_VFDB_ecoli {
     ### ktora wystepuje w wynikach 2 razy jako czesc roznych sciezek (stad head -1 nizej)
 
     EPEC=0
-    EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae\\|eaeH"  | grep -v BRAK | wc -l`
-    GENY_EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae\\|eaeH"  | grep -v BRAK | cut -f4 | tr "\\n" " "`
+    # eaeH to nie intymina
+    EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae"  | grep -v BRAK | wc -l`
+    GENY_EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae"  | grep -v BRAK | cut -f4 | tr "\\n" " "`
     if [ \${EPEC} -gt 0 ]; then
       echo -e "EPEC\\t\${GENY_EPEC}" >> VFDB_phenotype.txt
     fi
@@ -894,9 +895,6 @@ process run_spifinder {
 }
 
 
-// process run_virulencefinder {
-// TO DO
-//}
 
 process run_kraken2_illumina {
   // kraken2 instalowany jest przez ETOKI i jest w path kontenera do salmonelli
@@ -1087,7 +1085,7 @@ process run_pHierCC_pubmlst {
   input:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES)
   output:
-  tuple val(x), path('parsed_phiercc_pubmlst.txt')
+  tuple val(x), path('parsed_phiercc_pubmlst.txt'), val(SPECIES)
   when:
   SPECIES == 'jejuni'
   script:
@@ -1272,6 +1270,7 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f, gzip.open(f'{di
 """
 }
 
+
 process extract_historical_data_enterobase {
   container  = 'salmonella_illumina:2.0'
   tag "Extracting historical data for sample $x"
@@ -1362,8 +1361,98 @@ process plot_historical_data_enterobase {
   SPECIES =~ /Salmo*/ ||  SPECIES =~ /Escher*/
   script:
 // The script requires a geojeson file that is a part of our container 
+// The 3 parameters are input file, output prefix, year fromwhich plot the data, data before that year are ignored (to save html size)
+// Same options are used for pubmlst version of that script
 """
-python /data/plot_historical_data_plotly.py enterobase_historical_data.txt enterobase_historical_data
+python /data/plot_historical_data_plotly.py enterobase_historical_data.txt enterobase_historical_data 2009
+"""
+
+}
+
+
+process extract_historical_data_pubmlst {
+  // The script is nearly identical to extract_historical_data_enterobase
+  // However it is eqecuted on a different "branch" of a pipeline
+  // and must be duplicated 
+  container  = 'salmonella_illumina:2.0'
+  tag "Extracting historical data for sample $x"
+  containerOptions "--volume ${params.genus_db_absolute_path_on_host}:/Genus"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
+  input:
+  tuple val(x), path('parsed_phiercc_pubmlst.txt'), val(SPECIES)
+  output:
+  tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES)
+  when:
+  SPECIES == 'jejuni'
+
+  script:
+"""
+#!/usr/bin/python
+import numpy as np
+import sys
+import re
+species="${SPECIES}"
+def get_hiercc_level(my_file):
+    with open(my_file) as f:
+        i = 0
+        for line in f:
+            if i == 0:
+                klucze = line.rsplit()
+            elif i == 1:
+                wartosci = line.rsplit()
+            i+=1
+    slownik = {x:y for x,y in zip(klucze,wartosci)}
+    return slownik
+
+
+directory='/Genus/jejuni/pubmlst' # where are the data for this species 
+scheme_name='C. jejuni / C. coli cgMLST v2' # name of the scheme in that database 
+
+slownik_hiercc = get_hiercc_level('parsed_phiercc_pubmlst.txt') # data for our sample 
+
+phiercc_level_userdefined = '25' # pubmlst keeps only values of 5, 10, 25, 50 and 200 for Campylo
+
+common_STs = slownik_hiercc[f'HC{phiercc_level_userdefined}'] 
+
+
+straindata = np.load(f'{directory}/straindata_table.npy',  allow_pickle=True)
+straindata = straindata.item()
+
+dane_historyczne = {} # strain id is a key, as a value we keep country and date
+for strain, wartosc in straindata.items():
+    if str(wartosc['hiercc'][f'd{phiercc_level_userdefined}']) == str(common_STs):
+        for scheme in  wartosc['sts']:
+            if scheme['scheme_name'] == scheme_name:
+                dane_historyczne[strain] = [wartosc['country'], wartosc['year'], scheme['st_id']]
+
+# zapisujemy dane
+with open('pubmlst_historical_data.txt', 'w') as f:
+    f.write(f'Strain_id\\tCountry\\tYear\\tST\\n')
+    for klucz, wartosc in dane_historyczne.items():
+        if wartosc[0] == 'United States':
+            f.write(f'{klucz}\\tUnited States of America\\t{wartosc[1]}\\t{wartosc[2]}\\n')
+        elif 'UK' in wartosc[0]:
+            f.write(f'{klucz}\\tUnited Kingdom\\t{wartosc[1]}\\t{wartosc[2]}\\n')
+        else:
+            f.write(f'{klucz}\\t{wartosc[0]}\\t{wartosc[1]}\\t{wartosc[2]}\\n')
+"""
+}
+
+
+process plot_historical_data_pubmlst {
+  container  = 'salmonella_illumina:2.0'
+  tag "Extracting historical data for sample $x"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
+  input:
+  tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES)
+  output:
+  tuple val(x), path('*html')
+  when:
+  SPECIES == 'jejuni'
+  script:
+// The script requires a geojeson file that is a part of our container
+"""
+python /data/plot_historical_data_plotly.py pubmlst_historical_data.txt pubmlst_historical_data 2009
 """
 
 }
@@ -1438,6 +1527,32 @@ process run_plasmidfinder {
   """
 }
 
+process run_virulencefinder {
+  container  = 'salmonella_illumina:2.0'
+  tag "Predicting plasmids for sample $x"
+  publishDir "pipeline_wyniki/${x}/virulencefinder_results", mode: 'copy'
+  input:
+  tuple val(x), path(fasta), val(SPECIES)
+  output:
+  tuple val(x), path('results_tab.tsv')
+  when:
+  SPECIES =~ /Escher*/
+  script:
+  """
+  # -i to oczywiscie input na podstawie jego rozszerzenia program wybiera metode do analizy (kma dla fastq i blastn dla fasta)
+  # -o to katalog z wynikami, musi istniec
+  # -p to sciezka do katalog z bazami (katalog z repo virulencefinder_db)
+  # -l to minimalny procent sekwencji jaki musi alignowac sie na genom
+  # -t to minimalne sequence identity miedzy query a subject
+  # -d to nazwa bazy/organizmu
+  # -x printuj dodatkowe dane w output (alignmenty)
+  # nie wiem czy to kwestia niezgodnosci mojego virulencefindera z bazami
+  # ale program printuje mase output (choc tworzy poprawne pliki w koncu to parser blasta)
+  mkdir virulencefinder_results # program wymaga tworzenia katalogu samodzielnie
+  /opt/docker/virulencefinder/virulencefinder.py  -i $fasta -o virulencefinder_results -p /opt/docker/virulencefinder_db  -d virulence_ecoli -l 0.6 -t 0.9 -x >> log 2>&1
+  cp virulencefinder_results/results_tab.tsv .
+  """
+}
 
 process get_species_illumina {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
@@ -2037,6 +2152,8 @@ extract_historical_data_enterobase_out = extract_historical_data_enterobase(run_
 plot_historical_data_enterobase(extract_historical_data_enterobase_out)
 
 
+extract_historical_data_pubmlst_out = extract_historical_data_pubmlst(run_pHierCC_enterobase_out_pubmlst)
+plot_historical_data_pubmlst(extract_historical_data_pubmlst_out)
 
 // AMR predictions
 run_resfinder(final_assembly_with_species)
@@ -2048,6 +2165,7 @@ run_plasmidfinder(final_assembly)
 // Virulence
 prokka_out = run_prokka(final_assembly)
 VFDB_out=run_VFDB(prokka_out.join(predict_species_out, by : 0))
+run_virulencefinder(final_assembly_with_species)
 
 // These three modules have "when" instructions and works only for Escher
 run_ecotyper(final_assembly_with_species)
