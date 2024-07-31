@@ -1554,6 +1554,10 @@ process run_virulencefinder {
   """
 }
 
+//process parse_virulencefinder_ecoli {
+// Po ustaleniu listy genow
+//}
+
 process get_species_illumina {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
 tag "Predicting species for ${x}"
