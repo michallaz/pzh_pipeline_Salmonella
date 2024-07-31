@@ -1845,7 +1845,7 @@ process get_species_nanopore {
 tag "Predicting species for ${x}"
 
 input:
-tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFIDER_GENUS)
+tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS)
 
 output:
 tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), emit: species
