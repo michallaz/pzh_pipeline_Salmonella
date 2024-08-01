@@ -13,14 +13,18 @@ dataframe = pd.read_csv(sys.argv[1], sep = "\t", dtype = 'str', na_values = 'Non
 wynik = dataframe[['Country', 'Year']].groupby(['Country', 'Year']).size()
 max_value = wynik.max()
 
-max_year = dataframe.Year.dropna().astype(int).max() + 1
-min_year = dataframe.Year.dropna().astype(int).min() - 1
-
-if min_year < min_year_to_plot:
+if dataframe.dropna().Year.astype(int).size == 0:
     min_year = min_year_to_plot
-
-if max_year < min_year_to_plot:
     max_year = min_year_to_plot + 1
+else:
+    max_year = dataframe.Year.dropna().astype(int).max() + 1
+    min_year = dataframe.Year.dropna().astype(int).min() - 1
+
+    if min_year < min_year_to_plot:
+        min_year = min_year_to_plot
+
+    if max_year < min_year_to_plot:
+        max_year = min_year_to_plot + 1
 
 # geojeson file within container
 dane = geopandas.read_file('/data/ne_10m_admin_0_countries.geojson')
