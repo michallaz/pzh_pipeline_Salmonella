@@ -893,7 +893,7 @@ process run_kraken2_illumina {
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken_*.txt"
   containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
-  maxForks 5
+  maxForks 6
 
   input:
   tuple val(x), path(reads)
@@ -934,7 +934,7 @@ process run_metaphlan_illumina {
   container  = 'salmonella_illumina:2.0'
   publishDir "pipeline_wyniki/${x}/metaphlan", mode: 'copy', pattern: "report_metaphlan*"
   containerOptions "--volume ${params.metaphlan_db_absolute_path_on_host}:/bowtie_db"
-  maxForks 5
+  maxForks 6
   cpus params.cpus
   input:
   tuple val(x), path(reads)
@@ -1632,7 +1632,9 @@ process run_flye {
   tag "Predicting scaffold with flye for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   cpus params.cpus
-  maxForks 5
+  // in --deterministic is awfully slow because in uses 1 cpu for some task
+  // hence I increased maxforks to 10
+  maxForks 10 
   input:
   tuple val(x), path(fastq_gz)
   output:
@@ -1642,7 +1644,7 @@ process run_flye {
   """
   # /data/Flye to sciezka z Flye instalowanego z github, uwaga
   # w kontenerze tez jest flye instalowant przez etoki i ten jest w PATH
-  /data/Flye/bin/flye --nano-raw ${fastq_gz} -g 6m -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
+  /opt/docker/Flye/bin/flye --nano-raw ${fastq_gz} -g 6m -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
 
   """
  
@@ -1783,7 +1785,7 @@ process run_kraken2_nanopore {
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken*.txt"
   containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
-  maxForks 5
+  maxForks 6
 
   input:
   tuple val(x), path(reads)
