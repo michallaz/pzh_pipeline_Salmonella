@@ -268,9 +268,9 @@ RUN make
 # NIE uzywac -j  przy make bo nie buduja sie wszystkie binarki
 # NIE dodajemy do path bo jest juz flye z Etoki w PATH 
 #ENV PATH $PATH:/data/Flye/bin  
-WORKDIR /data
+# WORKDIR /data
 # Pozostale skrypty
-COPY coverage_filter.py calculate_stats.py run_VFDB.sh /opt/docker/EToKi/externals
+# COPY coverage_filter.py calculate_stats.py run_VFDB.sh /opt/docker/EToKi/externals
 
 ## DO INSTALACJI CANU POTRZEBA DOINSTALOWAC apt install pkgconf
 ## Nie uzywamy canu
@@ -334,18 +334,19 @@ WORKDIR /opt/docker
 # Pobieramy bazy aby ectyper nie robil tego sam za kazdym razem
 RUN wget -O /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/assembly_summary_refseq.txt http://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt; wget -O  /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/refseq.genomes.k21s1000.msh https://gembox.cbcb.umd.edu/mash/refseq.genomes.k21s1000.msh
 
-### This is from Virulencefinder DOCKERFILE
+### This fragment is aprtially pasted from Virulencefinder DOCKERFILE
 ENV VIRULENCEFINDER_VERSION 2.0.5
 RUN git clone https://bitbucket.org/genomicepidemiology/virulencefinder.git; cd virulencefinder; git checkout tags/${VIRULENCEFINDER_VERSION}
 
 RUN cd /opt/docker/; \
     git clone --depth 1 https://git@bitbucket.org/genomicepidemiology/virulencefinder_db.git; \
     cd virulencefinder_db; \
-    python INSTALL.py /opt/docker/kma/kma_index non_interactive; 
+    python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+    cd /data 
 
 ###
 
-COPY all_functions_salmonella.py run_blastn_ver11.sh run_blastn_ver10.sh master_script_kontener.sh prep_hierCC.py parse_fastqc_output.py geojeson/ne_10m_admin_0_countries.geojson plot_historical_data_plotly.py  parse_kmerfinder.py /data/
-WORKDIR /data
+COPY bin/all_functions_salmonella.py bin/run_blastn_ver11.sh bin/parse_fastqc_output.py geojeson/ne_10m_admin_0_countries.geojson bin/plot_historical_data_plotly.py  bin/parse_kmerfinder.py /data/
+COPY bin/coverage_filter.py bin/calculate_stats.py bin/run_VFDB.sh /opt/docker/EToKi/externals
+
 CMD ["/bin/bash"]
-#ENTRYPOINT ["/bin/bash", "/SARS-CoV2/scripts/master_sript_docker.sh"]
