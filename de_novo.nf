@@ -275,7 +275,7 @@ process run_7MLST {
   container  = 'salmonella_illumina:2.0'
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting MLST for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  // publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(fasta), val(SPECIES), val(GENUS)
   output:
@@ -426,7 +426,7 @@ process run_Seqsero {
   input:
   tuple val(x), path(fasta), val(SPECIES), val(GENUS)
   output:
-  tuple val(x), path('seqsero_out/SeqSero_result.txt')
+  tuple val(x), path('seqsero/SeqSero_result.txt')
   when:
   GENUS == 'Salmonella'
   script:
@@ -434,7 +434,7 @@ process run_Seqsero {
   # -m to rodzaj algorytmu -m to chyba opart o k-mery
   # -t 4 to informacja ze inputem sa contigi z genomem
   # -p to procki, proces jest szybki wiec ustawie 4 + maxforks 15
-  python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p 4 -i $fasta -d seqsero_out
+  python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p 4 -i $fasta -d seqsero
   """
 }
 
@@ -442,7 +442,7 @@ process run_sistr {
   // Sistr works only for Salmonella
   container  = 'salmonella_illumina:2.0'
   tag "Predicting OH for sample $x with Sistr"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy'
   cpus params.cpus
   maxForks 15
   input:
@@ -470,17 +470,17 @@ process run_sistr {
   """
 }
 
-process run_ecotyper {
+process run_ectyper {
   // This process works only for Escherichia
   container  = 'salmonella_illumina:2.0'
   tag "Predicting OH for sample $x with ectyper"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/ECTyper", mode: 'copy'
   cpus params.cpus
   maxForks 15
   input:
   tuple val(x), path(fasta), val(SPECIES), val(GENUS)
   output:
-  tuple val(x), path('ectyper_out/*')
+  tuple val(x), path('output.tsv')
   when:
   GENUS == 'Escherichia'
   script:
@@ -492,7 +492,7 @@ process run_ecotyper {
   # -o to katalog z output
   mkdir ectyper_out
   ectyper -i $fasta -c 4 -hpid 90 -o ectyper_out
-
+  cp ectyper_out/output.tsv .
   """
 }
 
@@ -500,13 +500,13 @@ process run_ecotyper {
 process run_resfinder {
   container  = 'salmonella_illumina:2.0'
   tag "Predicting microbial resistance for sample $x"
-  publishDir "pipeline_wyniki/${x}/resfinder", mode: 'copy', pattern: "resfinder_out/ResFinder_results_table.txt"
-  publishDir "pipeline_wyniki/${x}/resfinder", mode: 'copy', pattern: "resfinder_out/pheno_table_*.txt"
-  publishDir "pipeline_wyniki/${x}/resfinder", mode: 'copy', pattern: "resfinder_out/PointFinder_results.txt"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/ResFinder_results_table.txt"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/pheno_table_*.txt"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/PointFinder_results.txt"
   input:
   tuple val(x), path(fasta), val(SPECIES), val(GENUS)
   output:
-  tuple val(x), path('resfinder_out/pheno_table*.txt'), path('resfinder_out/ResFinder_results_table.txt'), path('resfinder_out/PointFinder_results.txt')
+  tuple val(x), path('resfinder/pheno_table*.txt'), path('resfinder/ResFinder_results_table.txt'), path('resfinder/PointFinder_results.txt')
   when:
   GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
@@ -531,11 +531,11 @@ process run_resfinder {
   # even if different species is actually analyzed. 
 
   if [[ "${GENUS}" == *"Salmo"* ]]; then
-      python -m resfinder -o resfinder_out/ -s 'senterica'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+      python -m resfinder -o resfinder/ -s 'senterica'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
   elif [[ "${GENUS}" == *"Escher"* ]]; then
-      python -m resfinder -o resfinder_out/ -s 'ecoli'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+      python -m resfinder -o resfinder/ -s 'ecoli'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
   elif [ ${GENUS} == "Campylobacter" ]; then
-       python -m resfinder -o resfinder_out/ -s 'cjejuni'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+       python -m resfinder -o resfinder/ -s 'cjejuni'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
   fi 
  
   """
@@ -545,7 +545,7 @@ process run_cgMLST {
   container  = 'salmonella_illumina:2.0'
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting cgMLST for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  // publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   maxForks 5
   input:
@@ -694,6 +694,7 @@ process run_prokka {
 
   container  = 'staphb/prokka:latest'
   tag "Predicting genes for sample $x"
+  // Do we really need prokka output in results dir ? 
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   cpus params.cpus
   maxForks 5
@@ -706,6 +707,7 @@ process run_prokka {
   script:
   """
   prokka --metagenome --cpus ${params.cpus} --outdir prokka_out --prefix prokka_out --compliant --kingdom Bacteria $fasta 
+
   """
 }
 
@@ -889,7 +891,7 @@ process run_kraken2_illumina {
   container  = 'salmonella_illumina:2.0'
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "Summary_kraken_*.txt"
+  publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken_*.txt"
   containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
   maxForks 5
 
@@ -953,7 +955,7 @@ process run_metaphlan_illumina {
 process run_kmerfinder_illumina {
   tag "kmerfinder:${x}"
   container  = 'salmonella_illumina:2.0'
-  publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results*"
+  publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results.spa"
   containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
   maxForks 5
   cpus params.cpus
@@ -984,7 +986,7 @@ process run_pHierCC_enterobase {
   errorStrategy 'retry' // in case there is aroblem with internet connection
   container  = 'salmonella_illumina:2.0'
   tag "Predicting hierCC from enterobase for sample $x"
-  publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS)
   output:
@@ -1074,7 +1076,7 @@ process run_pHierCC_pubmlst {
   container  = 'salmonella_illumina:2.0'
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting hierCC with local database for sample $x"
-  publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS)
   output:
@@ -1137,7 +1139,7 @@ process run_pHierCC_local {
   container  = 'salmonella_illumina:2.0'
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting hierCC with local database for sample $x"
-  publishDir "pipeline_wyniki/${x}/phiercc", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS)
   output:
@@ -1498,11 +1500,11 @@ process run_amrfinder {
 process run_plasmidfinder {
   container  = 'salmonella_illumina:2.0'
   tag "Predicting plasmids for sample $x"
-  publishDir "pipeline_wyniki/${x}/plasmidfinder_results", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
   tuple val(x), path(fasta), val(SPECIES), val(GENUS)
   output:
-  tuple val(x), path('plasmidfinder_results/*')
+  tuple val(x), path('plasmidfinder/results_tab.tsv')
   when:
   GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
@@ -1513,15 +1515,15 @@ process run_plasmidfinder {
   # -l to minimalny procent sekwencji jaki musi alignowac sie na genom
   # -t to minimalne sequence identity miedzy query a subject
   # -x printuj dodatkowe dane w output (alignmenty)
-  mkdir plasmidfinder_results # program wymaga tworzenia katalogu samodzielnie
-  /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder_results -p /opt/docker/plasmidfinder_db -l 0.6 -t 0.9 -x
+  mkdir plasmidfinder # program wymaga tworzenia katalogu samodzielnie
+  /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder -p /opt/docker/plasmidfinder_db -l 0.6 -t 0.9 -x
   """
 }
 
 process run_virulencefinder {
   container  = 'salmonella_illumina:2.0'
   tag "Predicting plasmids for sample $x"
-  publishDir "pipeline_wyniki/${x}/virulencefinder_results", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/virulencefinder", mode: 'copy', pattern: "results_tab.tsv"
   input:
   tuple val(x), path(fasta), val(SPECIES), val(GENUS)
   output:
@@ -1539,9 +1541,9 @@ process run_virulencefinder {
   # -x printuj dodatkowe dane w output (alignmenty)
   # nie wiem czy to kwestia niezgodnosci mojego virulencefindera z bazami
   # ale program printuje mase output (choc tworzy poprawne pliki w koncu to parser blasta)
-  mkdir virulencefinder_results # program wymaga tworzenia katalogu samodzielnie
-  /opt/docker/virulencefinder/virulencefinder.py  -i $fasta -o virulencefinder_results -p /opt/docker/virulencefinder_db  -d virulence_ecoli -l 0.6 -t 0.9 -x >> log 2>&1
-  cp virulencefinder_results/results_tab.tsv .
+  mkdir virulencefinder # program wymaga tworzenia katalogu samodzielnie
+  /opt/docker/virulencefinder/virulencefinder.py  -i $fasta -o virulencefinder -p /opt/docker/virulencefinder_db  -d virulence_ecoli -l 0.6 -t 0.9 -x >> log 2>&1
+  cp virulencefinder/results_tab.tsv .
   """
 }
 
@@ -1552,12 +1554,13 @@ process run_virulencefinder {
 process get_species_illumina {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
 tag "Predicting species for ${x}"
-
+publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
 input:
 tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'), path('report_metaphlan_SGB.txt'), path('report_metaphlan_species.txt'), path('report_metaphlan_genera.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS)
 
 output:
 tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), emit: species
+path('predicted_genus_and_species.txt'), emit: fo_pubdir
 
 script:
 """
@@ -1608,7 +1611,7 @@ echo ${KMERFINDER_GENUS} >> intermediate_genus.txt
 #Ecoli and Schigella are the same thing
 FINAL_GENUS=`cat intermediate_genus.txt | sed s'/Shigella/Escherichia/'g | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3`
 
-echo -e "Final genus and species: \${FINAL_GENUS}\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
+echo -e "Final genus:\t\${FINAL_GENUS}\nFinal species:\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
 
 """
 }
@@ -1627,7 +1630,7 @@ process run_flye {
 
   container  = 'salmonella_illumina:2.0'
   tag "Predicting scaffold with flye for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
+  // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   cpus params.cpus
   maxForks 5
   input:
@@ -1664,7 +1667,7 @@ process run_minimap2 {
   // Proces do mapowania odczytow na scaffold
   tag "Remapping of reads to predicted scaffold for sample $x"
   container  = 'salmonella_illumina:2.0' 
-  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
+  // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   maxForks 5
   input:
   tuple val(x), path(fasta), path(reads) 
@@ -1684,7 +1687,7 @@ process run_minimap2_2nd {
   // W nanopre w jednym workflow uzywam go 2 razy wiec musze zrobic ta glupia kopie
   tag "Remapping of reads to predicted scaffold for sample $x"
   container  = 'salmonella_illumina:2.0'
-  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
+  // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   maxForks 5
   input:
   tuple val(x), path(fasta), path(reads)
@@ -1733,8 +1736,8 @@ process run_medaka {
   // wygladzanie genomu medaka, nanopolish nie dziala bo nie mamy pliko fast5
 
   container  = 'salmonella_illumina:2.0'
-  tag "Pilon for sample $x"
-  publishDir "pipeline_wyniki/${x}/medaka", mode: 'copy', pattern: 'latest_pilon.*'
+  tag "Medaka for sample $x"
+  // publishDir "pipeline_wyniki/${x}/medaka", mode: 'copy', pattern: 'latest_pilon.*'
   maxForks 5
   input:
   tuple val(x), path(bam1), path(fasta)
@@ -1778,7 +1781,7 @@ process run_kraken2_nanopore {
   container  = 'salmonella_illumina:2.0'
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
-  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "summary_kraken.txt"
+  publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken*.txt"
   containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
   maxForks 5
 
@@ -1819,7 +1822,7 @@ process run_kraken2_nanopore {
 process run_kmerfinder_nanopore {
   tag "kmerfinder:${x}"
   container  = 'salmonella_illumina:2.0'
-  publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results*"
+  publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results.spa"
   containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
   maxForks 5
   cpus params.cpus
@@ -1843,7 +1846,7 @@ process run_kmerfinder_nanopore {
 process get_species_nanopore {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
 tag "Predicting species for ${x}"
-
+publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
 input:
 tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS)
 
@@ -1895,7 +1898,7 @@ echo ${KMERFINDER_GENUS} >> intermediate_genus.txt
 
 FINAL_GENUS=`cat intermediate_genus.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3`
 
-echo -e "Final genus and species: \${FINAL_GENUS}\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
+echo -e "Final genus:\t\${FINAL_GENUS}\nFinal species:\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
 
 """
 }
@@ -2181,7 +2184,7 @@ run_virulencefinder(final_assembly_with_species)
 
 // These three modules have "when" instructions and works only for Escher
 
-run_ecotyper(final_assembly_with_species)
+run_ectyper(final_assembly_with_species)
 parse_VFDB_ecoli(VFDB_out.ecoli)
 
 // These three modules have "when" instructions and works only for Salmonella
