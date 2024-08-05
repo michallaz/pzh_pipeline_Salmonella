@@ -315,7 +315,7 @@ process parse_7MLST {
 
   container  = 'salmonella_illumina:2.0'
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  tag "Pasring MLST for sample $x"
+  tag "Parsing MLST for sample $x"
   publishDir "pipeline_wyniki/${x}/MLST", mode: 'copy', pattern: 'MLST*txt'
   maxForks 1
   input:
@@ -1352,7 +1352,7 @@ with open('enterobase_historical_data.txt', 'w') as f:
 
 process plot_historical_data_enterobase {
   container  = 'salmonella_illumina:2.0'
-  tag "Extracting historical data for sample $x"
+  tag "Plot historical data for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
   tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES), val(GENUS)
@@ -1443,7 +1443,7 @@ with open('pubmlst_historical_data.txt', 'w') as f:
 
 process plot_historical_data_pubmlst {
   container  = 'salmonella_illumina:2.0'
-  tag "Extracting historical data for sample $x"
+  tag "Plot historical data for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
   tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES), val(GENUS)
@@ -1566,8 +1566,8 @@ script:
 """
 PRE_FINALE_SPECIES=""
 cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
-cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1" "}' | sed s'/s__//'g | sed s'/_/ /'g >> intermediate.txt
-echo ${KMERFINDER_SPECIES} >> intermediate.txt
+cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1}' | sed s'/s__//'g | sed s'/_/ /'g >> intermediate.txt
+echo ${KMERFINDER_SPECIES} | cut -d ' ' -f1-2 >> intermediate.txt
 PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
 
 
@@ -1600,13 +1600,13 @@ elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
 elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
     FINALE_SPECIES="upsaliensis"
 else
-    FINALE_SPECIES="unk"
+    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
 fi
 
 
 cat report_kraken2.txt | grep -w "G" | sort -rnk1 | head -1 | awk '{print \$6,\$7}'  >> intermediate_genus.txt
 cat report_metaphlan_genera.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1" "}' | sed s'/g__//'g | sed s'/_/ /'g >> intermediate_genus.txt
-echo ${KMERFINDER_GENUS} >> intermediate_genus.txt
+echo -e "${KMERFINDER_GENUS} " >> intermediate_genus.txt
 
 #Ecoli and Schigella are the same thing
 FINAL_GENUS=`cat intermediate_genus.txt | sed s'/Shigella/Escherichia/'g | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3`
@@ -1859,7 +1859,7 @@ script:
 """
 PRE_FINALE_SPECIES=""
 cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
-echo ${KMERFINDER_SPECIES} >> intermediate.txt
+echo ${KMERFINDER_SPECIES} | cut -d ' ' -f1-2  >> intermediate.txt
 PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
 
 if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then
@@ -1891,12 +1891,12 @@ elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
 elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
     FINALE_SPECIES="upsaliensis"
 else
-    FINALE_SPECIES="unk"
+    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
 fi
 
 
 cat report_kraken2.txt | grep -w "G" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate_genus.txt
-echo ${KMERFINDER_GENUS} >> intermediate_genus.txt
+echo -e "${KMERFINDER_GENUS} " >> intermediate_genus.txt
 
 FINAL_GENUS=`cat intermediate_genus.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3`
 
