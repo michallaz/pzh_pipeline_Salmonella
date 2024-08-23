@@ -26,6 +26,9 @@ def read_genome(fasta):
 # nazywam to fastq bo etoki 3ma taka notacje
 # jedyne czego nie mam to ciagu quality
 fastq = read_genome(sys.argv[1])
+reject_fastq = read_genome(sys.argv[2])
+
+# Uwaga bierzemy contigi o dlugosci > 10 (oryginalnie bylo 300 jak w enterobase). Zgrac to z Tomkiem
 seq = sorted([s for s in fastq.values() if s[0] >= 300], key=lambda x: -x[0])
 n_seq = len(seq)
 n_base = sum([s[0] for s in seq])
@@ -41,6 +44,10 @@ if n_seq > 0:
     ave_depth = acc[1] / acc[0]
     for s in seq:
         n_low += np.sum(np.array(list(s[2])) == 'N')
+seq_reject = sorted([s for s in reject_fastq.values() if s[0] >= 300], key=lambda x: -x[0])
+n_seq_reject = len(seq_reject)
+n_base_reject = sum([s[0] for s in seq_reject])
+
 with open('Summary_statistics.txt', 'w') as f:
     f.write(
-        f'n_contig = {n_seq}\nn_base = {n_base}\nave_depth = {ave_depth}\nn_N = {float(n_low)}\nN50 = {n50}\nL50 = {l50}\n')
+        f'n_contig = {n_seq}\nn_base = {n_base}\nave_depth = {ave_depth}\nn_N = {float(n_low)}\nN50 = {n50}\nL50 = {l50}\nn_contig_with_reject={n_seq+n_seq_reject}\nn_base_with_reject = {n_base + n_base_reject}\n')

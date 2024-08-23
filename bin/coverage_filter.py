@@ -30,12 +30,14 @@ def filter_fastas(input_fasta, output_fasta, slownik_pokryc, global_coverage, th
     Outputowa fasta ma dodawana w naglowku _cov_X, gdzie X to wartosc
     """
     record= SeqIO.parse(input_fasta, 'fasta')
-    with open(output_fasta, 'w') as plik:
+    with open(output_fasta, 'w') as plik, open('Rejected_contigs.fa', 'w') as reject:
         for r in record:
             if slownik_pokryc[r.id] > (global_coverage * threshold):
                 plik.write(f'>{r.id}_cov_{slownik_pokryc[r.id]}\n')
                 plik.write(f'{str(r.seq)}\n')
             else:
+                reject.write(f'>{r.id}_cov_{slownik_pokryc[r.id]}\n')
+                reject.write(f'{str(r.seq)}\n')
                 pass
     return True
 

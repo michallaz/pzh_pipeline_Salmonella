@@ -249,6 +249,7 @@ process extract_final_contigs {
   tuple val(x), path(bam1), path('genomic_fasta.fasta')
   output:
   tuple val(x), path('final_scaffold_filtered.fa'), emit: ONLY_GENOME
+  tuple val(x), path('final_scaffold_filtered.fa'), path('Rejected_contigs.fa'), emit: ONLY_GENOME_AND_REJECT
   // final_scaffold_filtered.fa to nazwa ustawiona NA SZTYWNO w skrypcie coverage_filter.py
   script:
   """
@@ -262,12 +263,12 @@ process extract_final_stats {
   tag "Calculating basic statistics for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
-  tuple val(x), path(fasta)
+  tuple val(x), path(fasta), path(fasta_reject)
   output:
   tuple val(x), path('Summary_statistics.txt')
   script:
   """
-  python  /opt/docker/EToKi/externals/calculate_stats.py $fasta
+  python  /opt/docker/EToKi/externals/calculate_stats.py $fasta $fasta_reject
   """
 }
 
@@ -658,7 +659,7 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
         
             novel_profile_ST = f'local_{int(last_ST)+1}'
             
-            write_novel_sample(f'{novel_profile_ST}\\t{to_save}\\n', f'{sciezka}/local/profiles_local.list')
+            write_novel_sample(f'{novel_profile_ST}\\t{sample_profile}\\n', f'{sciezka}/local/profiles_local.list')
         
             f1.write(f'ST_sample\\tST_database\\tDistance\\tComment\\n')
             f1.write(f'{novel_profile_ST}\\t{matching_ST}\\t{min_value}\\tNovel in local database\\n')
@@ -1934,9 +1935,9 @@ single_bams_and_polished_genome = run_minimap2_2nd(for_remaping_polished_assembl
 final_assembly_filtered = extract_final_contigs(single_bams_and_polished_genome)
 
 emit:
-// sub pipeline zwraca identyfikator probki + nowy scaffold
-// bamy sa zbedne bo w kolejenj iteracji musza byc remapowane na poprawiony genom
-final_assembly_filtered.ONLY_GENOME
+extract_final_contigs.out[0] // fasta with contigs that passed coverage filter
+extract_final_contigs.out[1] // fasta with contigs that passed coverage filter and second fasta with refejted contigs
+
 }
 
 
@@ -2044,9 +2045,8 @@ merged_bams_into_onefile_and_scaffold_inner = merged_bams_into_onefile_inner.joi
 extract_final_contigs_out = extract_final_contigs(merged_bams_into_onefile_and_scaffold_inner)
 
 emit:
-// chyba .out jest mozliwa tylko gdy funkcja zwraca dwa emity, w jednym emit dostajemy sie
-// do niego bez posrednictwa .out
-extract_final_contigs_out.ONLY_GENOME
+extract_final_contigs.out[0] // fasta with contigs that passed coverage filter
+extract_final_contigs.out[1] // fasta with contigs that passed coverage filter and second fasta with refejted contigs
 }
 
 
@@ -2121,7 +2121,7 @@ third_polish_run = pilon_third(second_polish_run, processed_fastq.PE_path, proce
 
 // Remove contigs with coverage less than 0.1 avarage coverage
 
-final_assembly = calculate_coverage(third_polish_run, processed_fastq.PE_path, processed_fastq.SE_path)
+(final_assembly, final_assembly_with_reject) = calculate_coverage(third_polish_run, processed_fastq.PE_path, processed_fastq.SE_path)
 
 } else if (params.machine == 'Nanopore') {
 
@@ -2144,13 +2144,13 @@ processed_fastq = clean_fastq_nanopore(initial_fastq)
 initial_scaffold = run_flye(processed_fastq)
 
 // one round of assembly polishing with medaka
-final_assembly = polishing_with_medaka(initial_scaffold, processed_fastq)
+(final_assembly, final_assembly_with_reject) = polishing_with_medaka(initial_scaffold, processed_fastq)
 
 }
 
 
 // Assembly quality
-extract_final_stats(final_assembly)
+extract_final_stats(final_assembly_with_reject)
 
 // Species prediction with Achtman and core genome shemes
 final_assembly_with_species = final_assembly.join(predict_species_out, by : 0)
