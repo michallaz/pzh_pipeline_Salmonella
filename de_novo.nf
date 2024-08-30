@@ -265,10 +265,11 @@ process extract_final_stats {
   input:
   tuple val(x), path(fasta), path(fasta_reject)
   output:
-  tuple val(x), path('Summary_statistics.txt')
+  tuple val(x), path('Summary_statistics.txt'), path('Summary_statistics_with_reject.txt')
   script:
   """
-  python  /opt/docker/EToKi/externals/calculate_stats.py $fasta $fasta_reject
+  cat $fasta $fasta_reject >> all_contigs.fasta
+  python  /opt/docker/EToKi/externals/calculate_stats.py $fasta all_contigs.fasta
   """
 }
 
@@ -552,7 +553,7 @@ process run_cgMLST {
   input:
   tuple val(x), path(fasta), val(SPECIES), val(GENUS)
   output: 
-  tuple val(x), path('cgMLST.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('cgMLST.txt'), path('cgMLST_all_identical_allels.txt'), val(SPECIES), val(GENUS)
   when:
   GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
   // among Campylobacter only c.jejuni has cgMLST scheme
@@ -581,9 +582,10 @@ process parse_cgMLST {
   maxForks 1 // set to "1" thus we ensure that when multiple sequencing are analyzed we correctly assign cgST for each of the sample (if they are all new 
   // and not part of the Enterobase
   input:
-  tuple val(x), path('cgMLST.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('cgMLST.txt'), path('cgMLST_all_identical_allels.txt'), val(SPECIES), val(GENUS)
   output:
-  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS), emit: standard
+  path('cgMLST_all_identical_allels.txt'), emit: output
   when:
   GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
   script:
@@ -2159,7 +2161,7 @@ parse_7MLST(MLST_out)
 
 
 cgMLST_out = run_cgMLST(final_assembly_with_species)
-parse_cgMLST_out = parse_cgMLST(cgMLST_out)
+(parse_cgMLST_out, parse_cgMLST_only_output) = parse_cgMLST(cgMLST_out)
 run_pHierCC_local(parse_cgMLST_out)
 
 run_pHierCC_enterobase_out = run_pHierCC_enterobase(parse_cgMLST_out) // for Salmo and Escher

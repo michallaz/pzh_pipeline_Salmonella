@@ -81,8 +81,8 @@ do
 	if [ ${HITY} -gt 0 ]; then
 		# hity ze 100% seq id tylko te sa wazen
 		ALLELS=(`cat blastn_tmp.tab  | awk '{if($7 == 100  &&  ($4 - $3  + 1) == $2) print $1}'`)
-		
-
+		ILEOSC_HITOW=`echo ${ALLELS[@]} | tr " " "\n" | wc -l`
+		echo -e "${K}\t${ILEOSC_HITOW}" >> cgMLST_all_identical_allels.txt
 		# Musimy sprawdzic czy mapowania sa tylko na jeden contig
 		# Jesli na wiele to preferujemy ten contig na ktory mapowal sie POPRZEDNI allel
 		# Jesli na jeden to idziemy "klasycznie"
