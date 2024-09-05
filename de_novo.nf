@@ -1639,7 +1639,7 @@ process run_flye {
   // hence I increased maxforks to 10
   maxForks 10 
   input:
-  tuple val(x), path(fastq_gz)
+  tuple val(x), path(fastq_gz), val(SPECIES), val(GENUS)
   output:
   tuple val(x), path('output/assembly.fasta') 
   
@@ -1647,7 +1647,17 @@ process run_flye {
   """
   # /data/Flye to sciezka z Flye instalowanego z github, uwaga
   # w kontenerze tez jest flye instalowant przez etoki i ten jest w PATH
-  /opt/docker/Flye/bin/flye --nano-raw ${fastq_gz} -g 6m -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
+
+  if [[ "${GENUS}" == *"Salmo"* ]]; then
+      GENOME_SIZE="5.4m"
+  elif [[ "${GENUS}" == *"Escher"* ]]; then
+      GENOME_SIZE="4.6m"
+  elif [ ${GENUS} == "Campylobacter" ]; then
+      GENOME_SIZE="1.8m"
+  else
+      GENOME_SIZE="5m" # trafilem na zly organizm wiec wpisuje 5m ten genom i tak nie bedzie wykorzystany
+  fi
+  /opt/docker/Flye/bin/flye --nano-raw ${fastq_gz} -g \${GENOME_SIZE} -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
 
   """
  
@@ -1857,7 +1867,7 @@ tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.t
 
 output:
 tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), emit: species
-
+path('predicted_genus_and_species.txt'), emit: output
 script:
 """
 PRE_FINALE_SPECIES=""
@@ -2143,7 +2153,7 @@ predict_species_out = predict_species_nanopore(initial_fastq)
 processed_fastq = clean_fastq_nanopore(initial_fastq)
 
 // initial scaffold with Flye (with 3 internalrounds of polishing)
-initial_scaffold = run_flye(processed_fastq)
+initial_scaffold = run_flye(processed_fastq.join(predict_species_out))
 
 // one round of assembly polishing with medaka
 (final_assembly, final_assembly_with_reject) = polishing_with_medaka(initial_scaffold, processed_fastq)
