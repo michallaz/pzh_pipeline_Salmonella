@@ -44,7 +44,7 @@ run_blastn () {
 
 export -f run_blastn
 
-ls ${SCIEZKA_DO_FASTA}/*fasta | xargs -I {} basename {} | cut -d "." -f1 >> tmp.txt
+ls ${SCIEZKA_DO_FASTA}/*fasta | grep -v all | xargs -I {} basename {} | cut -d "." -f1 >> tmp.txt
 cat tmp.txt | xargs -I {} --max-procs=${MAX_PROC} bash -c "run_blastn {} ${GENOM} ${SCIEZKA_DO_FASTA}"
 
 PREVIOUS_POS="-1"
@@ -54,7 +54,7 @@ CONTIG_DIR="plus"
 # jesli contig jest plus kolejne allele z cg musza byc rowniez plus oraz musza byc ZA poprzednim allelem
 # jesli contig jest minus kolejne allele z cg musza byc minus oraz musza byc PRZED poprzednim allelem
 
-
+touch cgMLST_all_identical_allels.txt # W przypadku gdy mialem genom w ktorym wszystkie loci mialy allel -1, ten plik nie powstawal i wyrzucal pipeline
 for K in `cat tmp.txt`
 do
 	#if [ ${K} == "STMMW_00931" ]; then
