@@ -75,7 +75,8 @@ RUN git clone https://bitbucket.org/genomicepidemiology/pointfinder_db/; \
     git clone https://bitbucket.org/genomicepidemiology/plasmidfinder_db.git; \
     git clone --depth 1 https://git@bitbucket.org/genomicepidemiology/virulencefinder_db.git; \
     git clone https://bitbucket.org/genomicepidemiology/spifinder_db.git; \
-    git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git
+    git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git ;\
+    git clone https://bitbucket.org/genomicepidemiology/mlst_db.git
     
 
 ## "Installing" database (save cgmlstfinder_db that we dont use for now )
@@ -86,6 +87,7 @@ RUN cd /opt/docker/pointfinder_db; python3 INSTALL.py /opt/docker/kma/kma_index 
     cd /opt/docker/plasmidfinder_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
     cd /opt/docker/virulencefinder_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
     cd /opt/docker/spifinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+    cd /opt/docker/mlst_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
     cd /opt/docker
 
 ## CGE programs
@@ -97,6 +99,7 @@ RUN git clone https://bitbucket.org/genomicepidemiology/plasmidfinder.git; \
     git clone https://bitbucket.org/genomicepidemiology/kmerfinder.git; \
     git clone https://bitbucket.org/genomicepidemiology/spifinder.git; \
     git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder.git; \
+    git clone https://bitbucket.org/genomicepidemiology/mlst.git ;\
     pip install resfinder ;\
     git clone https://bitbucket.org/genomicepidemiology/virulencefinder.git; cd virulencefinder; git checkout tags/${VIRULENCEFINDER_VERSION} ;\
     cd /opt/docker
@@ -153,7 +156,24 @@ RUN git clone https://github.com/fenderglass/Flye ;\
 ###  NOT used by the pipeline, at least for now, but maybe in the future
 
 # WORKDIR /data
-# RUN git clone https://github.com/marbl/canu.git
+RUN git clone https://github.com/marbl/canu.git ;\
+    cd /opt/docker/canu/src/ ;\
+    make ;\
+    sed -i 's/\$java = `command -v \$java`/\$java = `which \$java`/'  /opt/docker/canu/build/bin/../lib/perl5/site_perl/canu/Defaults.pm ;\
+    sed -i 's/--threads 2/--threads 1/g'  /opt/docker/canu/build/bin/../lib/perl5/site_perl/canu/Consensus.pm ;\
+    cd /opt/docker 
+
+### canu ma problem z wykryciem javy przez blad w jego skrypcie
+### /opt/docker/canu/build/bin/../lib/perl5/site_perl/canu/Defaults.pm
+### linijka 1082 jest 
+### $java = `command -v $java`;  #  See Execution.pm getBinDirectoryShellCode()
+### powoduje ze polecenie "java" nie jest wywolywane, bo "command", polecenie shellai, u mnie w docker z jakiego powodu nie dziala
+### wystarczy ta linijke  zamienic na
+### $java = `which $java`
+### Przynajmniej poki autorzy canu nie zauwaza bledu, choc nie wiem czy nie jest to kwestia mojego dockera
+
+
+
 # RUN git clone --recursive https://github.com/jts/nanopolish.git
 
 # WORKDIR /data/canu/src
@@ -167,6 +187,7 @@ RUN git clone https://github.com/fenderglass/Flye ;\
 
 RUN pip install urllib3==1.26.16 pysam==0.21.0 parasail==1.3.4 ;\
     pip install pyabpoa==1.4.0 ;\
+    apt update ;\
     apt install python3.8-venv libncurses5-dev -y
 
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash

@@ -133,6 +133,70 @@ process clean_fastq_illumina {
 }
 
 
+process_run_initial_mlst_illumina {
+  // Pierwszy check MLSDT 7 genomwego dla celow QC
+  // z wykorzystaniem soft cge
+  // Proces wymaga zarwono golych odczytow, jak i informacji o gatunku, wiec bedzie 'wpiety' po species prediciton
+  // Jego QC jest wazne i jego wynik bedzie wpiety jako input do skladania genomu
+  // w tym celu wstawimy zmienna QC_status, ktora bedzie 'podrozowac' razem z samplem
+  // jesli qc_status bedzie fail to procesy potomne sie nie uruchomia ? zwroca dummy wartosci ?
+  container  = 'salmonella_illumina:2.0'
+  tag "Initial MLST for sample $x"
+  maxForks 5
+  input:
+  tuple val(x), path(reads), val(SPECIES), val(GENUS)
+  output:
+  env(QC_status)
+  script:
+  read_1 = reads[0]
+  read_2 = reads[1]
+  """
+  mkdir tmp
+  if [[ "${GENUS}" == *"Salmo"* ]]; then
+  python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
+  elif [[ "${GENUS}" == *"Escher"* ]]; then
+  python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s ecoli -p /opt/docker/mlst_db/ -mp kma -t tmp/
+  elif [ ${GENUS} == "Campylobacter" ]; then
+  # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd .. 
+  python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
+  fi
+
+  # Parsowanie wyniku
+
+  # Warunki do QC
+  """
+}
+
+
+
+process_run_initial_mlst_nanopore {
+  // Proces dla nanopore
+  container  = 'salmonella_illumina:2.0'
+  tag "Initial MLST for sample $x"
+  maxForks 5
+  input:
+  tuple val(x), path(reads), val(SPECIES), val(GENUS)
+  output:
+  env(QC_status)
+  script:
+  """
+  mkdir tmp
+  if [[ "${GENUS}" == *"Salmo"* ]]; then
+  python /opt/docker/mlst/mlst.py -i ${reads} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
+  elif [[ "${GENUS}" == *"Escher"* ]]; then
+  python /opt/docker/mlst/mlst.py -i ${reads} -s ecoli -p /opt/docker/mlst_db/ -mp kma -t tmp/
+  elif [ ${GENUS} == "Campylobacter" ]; then
+  # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd ..
+  python /opt/docker/mlst/mlst.py -i ${reads} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
+  fi
+
+  # Parsowanie wyniku
+
+  # Warunki do QC
+  """
+}
+
+
 process spades {
   // Funkcja do odpalania spadesa
   // Powstaly plik fasta jest poprawiany bo Hapo-G nie akceptuje "." w nazwach sekwencji w pliku fasta
@@ -1554,6 +1618,9 @@ process run_virulencefinder {
 // Po ustaleniu listy genow
 // }
 
+
+
+
 process get_species_illumina {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
 tag "Predicting species for ${x}"
@@ -1766,13 +1833,13 @@ process run_medaka {
  
   MODEL="r941_min_hac_g507"  
   
-  medaka consensus --model \${MODEL} \
+  medaka inference --model \${MODEL} \
                      --threads ${params.cpus} \
                      $bam1 \
                      forvariants.hdf
 
   
-  medaka variant $fasta forvariants.hdf medaka.vcf
+  medaka vcf forvariants.hdf  $fasta medaka.vcf
   medaka tools annotate medaka.vcf $fasta $bam1 medaka_annotated.vcf
   bcftools sort medaka_annotated.vcf >> medaka_annotated_sorted.vcf
   bgzip medaka_annotated_sorted.vcf
