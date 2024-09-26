@@ -133,7 +133,7 @@ process clean_fastq_illumina {
 }
 
 
-process_run_initial_mlst_illumina {
+process run_initial_mlst_illumina {
   // Pierwszy check MLSDT 7 genomwego dla celow QC
   // z wykorzystaniem soft cge
   // Proces wymaga zarwono golych odczytow, jak i informacji o gatunku, wiec bedzie 'wpiety' po species prediciton
@@ -169,7 +169,7 @@ process_run_initial_mlst_illumina {
 
 
 
-process_run_initial_mlst_nanopore {
+process run_initial_mlst_nanopore {
   // Proces dla nanopore
   container  = 'salmonella_illumina:2.0'
   tag "Initial MLST for sample $x"
@@ -193,6 +193,7 @@ process_run_initial_mlst_nanopore {
   # Parsowanie wyniku
 
   # Warunki do QC
+  QC_status="pass"
   """
 }
 
@@ -200,6 +201,7 @@ process_run_initial_mlst_nanopore {
 process spades {
   // Funkcja do odpalania spadesa
   // Powstaly plik fasta jest poprawiany bo Hapo-G nie akceptuje "." w nazwach sekwencji w pliku fasta
+  // Modul definiuje QC_status az do modulu extract_final_stats, gdzie status moze ulec zmianie
   cpus params.cpus
   container  = 'salmonella_illumina:2.0'
   tag "Spades dla sample $x"
@@ -207,7 +209,7 @@ process spades {
   input:
   tuple val(x), path('R1.fastq.gz'), path('R2.fastq.gz'), path('SE.fastq.gz')
   output:
-  tuple val(x),  path('scaffolds_fix.fasta')
+  tuple val(x),  path('scaffolds_fix.fasta'), env(QC_status)
   script:
   """
   #  for 150bp reads SPAdes uses k-mer sizes 21, 33, 55, 77
@@ -217,8 +219,20 @@ process spades {
   #  wywolanie spades w ramach etoki to tylko definicja inputu + liczby procesorow
   # /opt/docker/EToKi/externals/spades.py -t 8 --pe-1 1 /Salomenlla/test_etoki/id_151_novel_etoki_with_comments/prep_out_L1_R1.fastq.gz --pe-2 1 /Salomenlla/test_etoki/id_151_novel_etoki_with_comments/prep_out_L1_R2.fastq.gz --pe-s 2 /Salomenlla/test_etoki/id_151_novel_etoki_with_comments/prep_out_L1_SE.fastq.gz -o spades
 
-  python /opt/docker/EToKi/externals/spades.py --isolate -t ${task.cpus} --pe-1 1 R1.fastq.gz --pe-2 1 R2.fastq.gz --pe-s 2 SE.fastq.gz  -o spades_manual
-  cat spades_manual/scaffolds.fasta  | awk '{if(\$0 ~ />/) {split(\$0, ala, "_"); print ">NODE"ala[2]} else print \$0}' >> scaffolds_fix.fasta
+  QC_status="pass"
+  NO_READS=`zcat R1.fastq.gz | grep "^+" | wc -l`
+  if [ \${NO_READS} -lt 50000 ]; then
+    QC_status="fail"
+    # We create dummy files so that pipeline can continue
+    echo ">dummy_contig" >> scaffolds_fix.fasta
+    echo "AAAAAAAAAAAAA" >> scaffolds_fix.fasta
+    # zwracanie json z informacja ze na tym etapie pipeline zakoczyl dzialanie z powodu zbyt malej liczby odczytow
+    # wszystkie podrogramy przecwytuja komentarz i zwracaja odpowidni komunikat 
+  else
+    python /opt/docker/EToKi/externals/spades.py --isolate -t ${task.cpus} --pe-1 1 R1.fastq.gz --pe-2 1 R2.fastq.gz --pe-s 2 SE.fastq.gz  -o spades_manual
+    cat spades_manual/scaffolds.fasta  | awk '{if(\$0 ~ />/) {split(\$0, ala, "_"); print ">NODE"ala[2]} else print \$0}' >> scaffolds_fix.fasta
+  
+  fi
   """
 }
 
@@ -230,13 +244,18 @@ process bwa_paired {
   tag "RE-mapowanie PE dla sample $x"
   maxForks 5
   input:
-  tuple val(x), path('genomic_fasta.fasta'),  path(read_1),  path(read_2)
+  tuple val(x), path('genomic_fasta.fasta'), val(QC_status), path(read_1),  path(read_2)
   output:
   tuple val(x), path('mapowanie_bwa_PE.bam')
   script:
   """
-  /opt/docker/EToKi/externals/bwa index genomic_fasta.fasta
-  /opt/docker/EToKi/externals/bwa mem -t ${task.cpus} -T 30 genomic_fasta.fasta ${read_1} ${read_2} |  /opt/docker/EToKi/externals/samtools fixmate -m -@ ${task.cpus} - - | /opt/docker/EToKi/externals/samtools sort -@ ${task.cpus} -  |  /opt/docker/EToKi/externals/samtools markdup -r -@ ${task.cpus}  -O BAM - mapowanie_bwa_PE.bam
+
+  if [ ${QC_status == "fail" ]; then
+      touch mapowanie_bwa_PE.bam
+  else
+    /opt/docker/EToKi/externals/bwa index genomic_fasta.fasta
+    /opt/docker/EToKi/externals/bwa mem -t ${task.cpus} -T 30 genomic_fasta.fasta ${read_1} ${read_2} |  /opt/docker/EToKi/externals/samtools fixmate -m -@ ${task.cpus} - - | /opt/docker/EToKi/externals/samtools sort -@ ${task.cpus} -  |  /opt/docker/EToKi/externals/samtools markdup -r -@ ${task.cpus}  -O BAM - mapowanie_bwa_PE.bam
+  fi
   """
 }
 
@@ -248,20 +267,24 @@ process bwa_single {
   tag "RE-mapowanie SE dla sample $x"
   maxForks 5
   input:
-  tuple val(x), path('genomic_fasta.fasta'), path(reads)
+  tuple val(x), path('genomic_fasta.fasta'), val(QC_status), path(reads)
   output:
   tuple val(x), path('mapowanie_bwa_SE.bam')
+  // bwa_single przekazuje QC_status do merge_bams, nie ma potrzeby aby robily to oba moduly do bwa
   script:
   """
-  /opt/docker/EToKi/externals/bwa index genomic_fasta.fasta
-  /opt/docker/EToKi/externals/bwa mem -t ${task.cpus} -T 30 genomic_fasta.fasta ${reads} |  /opt/docker/EToKi/externals/samtools sort -@ ${task.cpus} -  |  /opt/docker/EToKi/externals/samtools markdup -r -@ ${task.cpus} -O BAM - mapowanie_bwa_SE.bam
+  if [ ${QC_status == "fail" ]; then
+     touch mapowanie_bwa_SE.bam
+  else
+    /opt/docker/EToKi/externals/bwa index genomic_fasta.fasta
+    /opt/docker/EToKi/externals/bwa mem -t ${task.cpus} -T 30 genomic_fasta.fasta ${reads} |  /opt/docker/EToKi/externals/samtools sort -@ ${task.cpus} -  |  /opt/docker/EToKi/externals/samtools markdup -r -@ ${task.cpus} -O BAM - mapowanie_bwa_SE.bam
+  fi
   """
 }
 
 process merge_bams {
   // process do mergowania bam-ow
-  // potrzebna jesli uzyje jednak uzyje Hapo-G
-  
+  // Uzywany w workflow calculate_coverage
   container  = 'salmonella_illumina:2.0'
   tag "Merging bam files for sample $x"
   input:
@@ -270,34 +293,46 @@ process merge_bams {
   tuple val(x), path('merged_bams.bam')
   script:
   """
-  /opt/docker/EToKi/externals/samtools merge -f merged_bams.bam $bam1 $bam2
+  PAIRED_BAM_SIZE=`wc -l $bam1 | cut -d " " -f1`
+  if [ \${PAIRED_BAM_SIZE} -eq 0 ]; then
+     touch merged_bams.bam
+  else
+    /opt/docker/EToKi/externals/samtools merge -f merged_bams.bam $bam1 $bam2
+  fi
   """ 
 }
 
 process run_pilon {
   // Dokladne uzycie pilona jest tu https://github.com/broadinstitute/pilon/wiki/Requirements-&-Usage
+  // Pilon tylko przekazuje QC_status bez mozliwosci zmiany
   container  = 'salmonella_illumina:2.0'
   tag "Pilon for sample $x"
   maxForks 5
   // publishDir "pilon_wyniki/${x}", mode: 'copy'
   input:
-  tuple val(x), path(bam1), path(bam2), path('genomic_fasta.fasta')
+  tuple val(x), path(bam1), path(bam2), path('genomic_fasta.fasta'), val(QC_status)
   output:
   tuple val(x), path('latest_pilon.fasta'), path('latest_pilon.changes'), emit: ALL
-  tuple val(x), path('latest_pilon.fasta'), emit: ONLY_GENOME
+  tuple val(x), path('latest_pilon.fasta'), val(QC_status), emit: ONLY_GENOME
   script:
   """
-  # indeksacja bam-ow
-  /opt/docker/EToKi/externals/samtools index  $bam1
-  /opt/docker/EToKi/externals/samtools index  $bam2
+  if [ ${QC_status == "fail" ]; then
+    echo ">dummy_contig" >> latest_pilon.fasta
+    echo "AAAAAAAAAAAAA" >> latest_pilon.fasta
+    touch latest_pilon.changes  
+  else 
+    # indeksacja bam-ow
+    /opt/docker/EToKi/externals/samtools index  $bam1
+    /opt/docker/EToKi/externals/samtools index  $bam2
 
-  # wywolanie pilon-a
-  java -jar /opt/docker/EToKi/externals/pilon.jar --threads ${params.cpus} --genome genomic_fasta.fasta --frags $bam1 --unpaired $bam2 --output pilon_polish --vcf --changes --outdir pilon_bwa
+    # wywolanie pilon-a
+    java -jar /opt/docker/EToKi/externals/pilon.jar --threads ${params.cpus} --genome genomic_fasta.fasta --frags $bam1 --unpaired $bam2 --output pilon_polish --vcf --changes --outdir pilon_bwa
  
-  # przygotowanie outputu
-  # cat pilon_bwa/pilon_polish.fasta | awk  -v ALA=${x} 'BEGIN{OFS=""}; {if(\$0 ~ />/) print \$0,"_", ALA; else print \$0}' >> last_pilon.fasta
-  cat pilon_bwa/pilon_polish.fasta >> latest_pilon.fasta
-  cp  pilon_bwa/pilon_polish.changes latest_pilon.changes
+    # przygotowanie outputu
+    # cat pilon_bwa/pilon_polish.fasta | awk  -v ALA=${x} 'BEGIN{OFS=""}; {if(\$0 ~ />/) print \$0,"_", ALA; else print \$0}' >> last_pilon.fasta
+    cat pilon_bwa/pilon_polish.fasta >> latest_pilon.fasta
+    cp  pilon_bwa/pilon_polish.changes latest_pilon.changes
+  fi
   """
 }
 
@@ -305,20 +340,26 @@ process run_pilon {
 process extract_final_contigs {
   // Liczenie pokrycia dla kazdego contiga polaczona z filtorwanie odczytow
   // Przy uzyciu NASZEGO skryptu
+  // Modukl przekazuje bez mozliwosci zmiany QC_stauts
   container  = 'salmonella_illumina:2.0'
   tag "Coverage-based filtering for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   maxForks 5
   input:
-  tuple val(x), path(bam1), path('genomic_fasta.fasta')
+  tuple val(x), path(bam1), path('genomic_fasta.fasta'), val(QC_status)
   output:
-  tuple val(x), path('final_scaffold_filtered.fa'), emit: ONLY_GENOME
-  tuple val(x), path('final_scaffold_filtered.fa'), path('Rejected_contigs.fa'), emit: ONLY_GENOME_AND_REJECT
+  tuple val(x), path('final_scaffold_filtered.fa'), val(QC_status), emit: ONLY_GENOME
+  tuple val(x), path('final_scaffold_filtered.fa'), path('Rejected_contigs.fa'), val(QC_status), emit: ONLY_GENOME_AND_REJECT
   // final_scaffold_filtered.fa to nazwa ustawiona NA SZTYWNO w skrypcie coverage_filter.py
   script:
   """
-  /opt/docker/EToKi/externals/samtools index  $bam1
-  python  /opt/docker/EToKi/externals/coverage_filter.py genomic_fasta.fasta $bam1 ${params.min_coverage_ratio}
+  if [ ${QC_status == "fail" ]; then
+    touch final_scaffold_filtered.fa
+    touch Rejected_contigs.fa   
+  else
+    /opt/docker/EToKi/externals/samtools index  $bam1
+    python  /opt/docker/EToKi/externals/coverage_filter.py genomic_fasta.fasta $bam1 ${params.min_coverage_ratio}
+  fi
   """
 }
 
@@ -327,13 +368,23 @@ process extract_final_stats {
   tag "Calculating basic statistics for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
-  tuple val(x), path(fasta), path(fasta_reject)
+  tuple val(x), path(fasta), path(fasta_reject), val(QC_status)
   output:
-  tuple val(x), path('Summary_statistics.txt'), path('Summary_statistics_with_reject.txt')
+  tuple val(x), path('Summary_statistics.txt'), path('Summary_statistics_with_reject.txt'), env(QC_status), emit: STATISTICS
+  tuple val(x), path(fasta), env(QC_status), emit: GENOME
   script:
   """
-  cat $fasta $fasta_reject >> all_contigs.fasta
-  python  /opt/docker/EToKi/externals/calculate_stats.py $fasta all_contigs.fasta
+  if [ ${QC_status == "fail" ]; then
+     touch Summary_statistics.txt
+     touch Summary_statistics_with_reject.txt
+     QC_status="fail" # jako ze output to env, musimy w srodowisku ustalic ta zmienne inaczej program nie "przechwyci" do output QC_status
+  else
+    cat $fasta $fasta_reject >> all_contigs.fasta
+    python  /opt/docker/EToKi/externals/calculate_stats.py $fasta all_contigs.fasta
+    # Tutaj parsujemy output Summary_statistics.txt aby ocenic czy genom ma odpowiednia dlugosc, ilosc contigow nie jest absurdalna itd
+    # Wiec tu jest potencjalny switch z pass do fail
+    QC_status="pass"
+  fi
   """
 }
 
@@ -343,24 +394,30 @@ process run_7MLST {
   tag "Predicting MLST for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('MLSTout.txt'), val(SPECIES), val(GENUS)
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
+  tuple val(x), path('MLSTout.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
   """
-  CAMPYLO_SPECIES='concisus fetus helveticus hyointestinalis insulaenigrae jejuni lanienae lari sputorum upsaliensis'
-  if [[ "${SPECIES}" == *"Salmo"* || "${SPECIES}" == *"Escher"* ]]; then
-  	/opt/docker/EToKi/EToKi.py MLSTdb -i /db/${GENUS}/MLST_Achtman/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
-  	/opt/docker/EToKi/EToKi.py MLSType -i $fasta -r MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
-  elif [[ \${CAMPYLO_SPECIES[@]} =~ "${SPECIES}" ]]; then
-       # sciezka dla Campylobacter
-       /opt/docker/EToKi/EToKi.py MLSTdb -i /db/${GENUS}/${SPECIES}/MLST/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
-       /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    touch MLSTout.txt
+    # json na zle QC
   else
+    CAMPYLO_SPECIES='concisus fetus helveticus hyointestinalis insulaenigrae jejuni lanienae lari sputorum upsaliensis'
+    if [[ "${SPECIES}" == *"Salmo"* || "${SPECIES}" == *"Escher"* ]]; then
+      /opt/docker/EToKi/EToKi.py MLSTdb -i /db/${GENUS}/MLST_Achtman/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
+      /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
+    elif [[ \${CAMPYLO_SPECIES[@]} =~ "${SPECIES}" ]]; then
+      # sciezka dla Campylobacter
+      /opt/docker/EToKi/EToKi.py MLSTdb -i /db/${GENUS}/${SPECIES}/MLST/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
+     /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
+    else
        echo "Provided species ${SPECIES} is not part of any MLST databases" >> MLSTout.txt
-  fi
+       # json na zly gatunek
+    fi # koniec if-a na zly gatunek
+  fi # koniec if-a na zle QC
   """
 }
 
@@ -385,11 +442,11 @@ process parse_7MLST {
   publishDir "pipeline_wyniki/${x}/MLST", mode: 'copy', pattern: 'MLST*txt'
   maxForks 1
   input:
-  tuple val(x), path('MLSTout.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('MLSTout.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations) 
   output:
   tuple val(x), path('MLST_parsed_output.txt'), path('MLST_sample_full_list_of_allels.txt'), path('MLST_closest_ST_full_list_of_allels.txt')
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
 """
 #!/usr/bin/python
@@ -401,9 +458,25 @@ from all_functions_salmonella import *
 
 species="$SPECIES"
 genus="$GENUS"
+qc_status="$QC_status"
+qc_status_contaminations="$QC_status_contaminations"
 
 ### Determine correct paths to /db
 ### Prepare dummy output if provided SPECIES is not handled
+
+if qc_status == "fail" or qc_status_contaminations == "fail":
+    with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_allels.txt', 'w') as f2, open('MLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+        f2.write(f'ST\\tComment\\n')
+        f2.write(f'unk\\tUnknownn species: {species}')
+
+        f3.write(f'ST\\tComment\\n')
+        f3.write(f'unk\\tUnknown species: {species}')
+    # json na zle QC
+    sys.exit(0)
+
 if re.findall('Salmo', genus) or re.findall('Esch', genus):
     sciezka=f'/db/{genus}/MLST_Achtman'
 elif species in ['concisus','fetus','helveticus','hyointestinalis','insulaenigrae','jejuni','lanienae','lari','sputorum','upsaliensis']:
@@ -418,7 +491,7 @@ else:
 
         f3.write(f'ST\\tComment\\n')
         f3.write(f'unk\\tUnknown species: {species}')
-
+    # json na zly gatunek
     sys.exit(0)
 ### Deterine ST of out Sample
 known_profiles, klucze_sorted = create_profile(f'{sciezka}/profiles.list')
@@ -490,17 +563,28 @@ process run_Seqsero {
   cpus params.cpus
   maxForks 15
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('seqsero/SeqSero_result.txt')
-  when:
-  GENUS == 'Salmonella'
+  // when:
+  // GENUS == 'Salmonella'
   script:
   """
   # -m to rodzaj algorytmu -m to chyba opart o k-mery
   # -t 4 to informacja ze inputem sa contigi z genomem
   # -p to procki, proces jest szybki wiec ustawie 4 + maxforks 15
-  python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p 4 -i $fasta -d seqsero
+
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    touch SeqSero_result.txt
+    #json na zle QC
+  else
+    if [ ${GENUS} == "Salmonella" ]; then
+      python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p 4 -i $fasta -d seqsero
+    else
+      touch SeqSero_result.txt
+      #json na zly gatunek
+    fi # koniec if-a na zly gatunek
+  fi # koniec if-a na zle QC
   """
 }
 
@@ -512,11 +596,11 @@ process run_sistr {
   cpus params.cpus
   maxForks 15
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('sistr-output.tab')
-  when:
-  GENUS == 'Salmonella'
+  // when:
+  // GENUS == 'Salmonella'
   script:
   // Uwaga sistr korzysta z WLASNEJ BAZY do pobrania z 
   // SISTR_DB_URL = 'https://sairidapublic.blob.core.windows.net/downloads/sistr/database/SISTR_V_1.1_db.tar.gz'
@@ -531,8 +615,17 @@ process run_sistr {
   // ponadto w katalogu /usr/local/lib/python3.8/dist-packages/sistr/ musi byc plik dbstatus.txt
   // bo jak go nie ma to sistr_cmd dalej wymusza sciaganie bazy
   """
-  /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t 4 -o sistr-output.tab $fasta
-
+ if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    # json na zle QC
+    touch sistr-output.tab
+  else
+    if [ ${GENUS} == "Salmonella" ]; then
+      /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t 4 -o sistr-output.tab $fasta
+    else
+      # json na zly gatunek
+      touch sistr-output.tab
+    fi # koniec if-a na zly gatunek
+  fi # koniec if-a na zle QC
   """
 }
 
@@ -544,11 +637,11 @@ process run_ectyper {
   cpus params.cpus
   maxForks 15
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('output.tsv')
-  when:
-  GENUS == 'Escherichia'
+  // when:
+  // GENUS == 'Escherichia'
   script:
   """
   # opcje:
@@ -557,8 +650,19 @@ process run_ectyper {
   # -hpid to minimalny seq identity dla antygenu H ustawiam na 90 zamiast default (95) po analizie Strain-u 5 z EQA 2023
   # -o to katalog z output
   mkdir ectyper_out
-  ectyper -i $fasta -c 4 -hpid 90 -o ectyper_out
-  cp ectyper_out/output.tsv .
+
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    # json na zle QC
+    touch output.tsv
+  else
+    if [ ${GENUS} == "Escherichia" ]; then
+      ectyper -i $fasta -c 4 -hpid 90 -o ectyper_out
+      cp ectyper_out/output.tsv .
+    else
+       #json na zly gatunek
+       touch output.tsv
+    fi # koniec if-a na zly gatunek
+  fi # koniec if-a na zle QC
   """
 }
 
@@ -570,11 +674,11 @@ process run_resfinder {
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/pheno_table_*.txt"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/PointFinder_results.txt"
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('resfinder/pheno_table*.txt'), path('resfinder/ResFinder_results_table.txt'), path('resfinder/PointFinder_results.txt')
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
   // resfinder rozumie 4 organizmy
   // campylobacter jejuni
@@ -595,14 +699,32 @@ process run_resfinder {
   # resfinder-owi mozna tez podac pliki fastq (-ifq)
   # resfinder operated on species-level, but for now we asume here that all Salmonella are s.enterica, or all Campylobaster are c.jejuni
   # even if different species is actually analyzed. 
+  
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    # Tworzenie json i output 
+    mkdir resfinder
+    cd resfinder
+    touch pheno_table_1.txt
+    touch ResFinder_results_table.txt
+    touch PointFinder_results.txt
+  else
 
-  if [[ "${GENUS}" == *"Salmo"* ]]; then
-      python -m resfinder -o resfinder/ -s 'senterica'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
-  elif [[ "${GENUS}" == *"Escher"* ]]; then
-      python -m resfinder -o resfinder/ -s 'ecoli'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
-  elif [ ${GENUS} == "Campylobacter" ]; then
-       python -m resfinder -o resfinder/ -s 'cjejuni'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
-  fi 
+    if [[ "${GENUS}" == *"Salmo"* ]]; then
+        python -m resfinder -o resfinder/ -s 'senterica'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+    elif [[ "${GENUS}" == *"Escher"* ]]; then
+        python -m resfinder -o resfinder/ -s 'ecoli'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+    elif [ ${GENUS} == "Campylobacter" ]; then
+         python -m resfinder -o resfinder/ -s 'cjejuni'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+    else
+      # Tworzenie json i dummy output
+      mkdir resfinder
+      cd resfinder
+      touch pheno_table_1.txt
+      touch ResFinder_results_table.txt
+      touch PointFinder_results.txt
+    fi # koniec if-a na gatunek przy zdanym QC 
+ 
+ fi # koniec if-a na status QC przekazany modulowi
  
   """
 }
@@ -615,25 +737,30 @@ process run_cgMLST {
   cpus params.cpus
   maxForks 5
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output: 
-  tuple val(x), path('cgMLST.txt'), path('cgMLST_all_identical_allels.txt'), val(SPECIES), val(GENUS)
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
+  tuple val(x), path('cgMLST.txt'), path('cgMLST_all_identical_allels.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
   // among Campylobacter only c.jejuni has cgMLST scheme
   script:
   """
-  if [[ "${GENUS}" == *"Salmo"* ]]; then 
-       /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/cgMLST_v2
-  elif [[ "${GENUS}" == *"Esche"* ]]; then
-       /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/cgMLST_v1
-  elif [ "${SPECIES}" == "jejuni" ]; then
-       /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/jejuni/cgMLST_v2
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    touch cgMLST.txt; touch cgMLST_all_identical_allels.txt
+    # json dla zlego QC
   else
-       # This should never happen
-       echo "Provided species $SPECIES is not part of any cgMLST databases" >> log.log
-  fi
-  cat log.log | cut -f1,2 > cgMLST.txt
+    if [[ "${GENUS}" == *"Salmo"* ]]; then 
+         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/cgMLST_v2
+    elif [[ "${GENUS}" == *"Esche"* ]]; then
+         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/cgMLST_v1
+    elif [ "${SPECIES}" == "jejuni" ]; then
+         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/jejuni/cgMLST_v2
+    else
+         # This should never happen
+         echo "Provided species $SPECIES is not part of any cgMLST databases" >> log.log
+    fi koniec if-a na zly gatunek
+    cat log.log | cut -f1,2 > cgMLST.txt
+  fi koniec if-a na zle QC
   """
 }
 
@@ -646,12 +773,12 @@ process parse_cgMLST {
   maxForks 1 // set to "1" thus we ensure that when multiple sequencing are analyzed we correctly assign cgST for each of the sample (if they are all new 
   // and not part of the Enterobase
   input:
-  tuple val(x), path('cgMLST.txt'), path('cgMLST_all_identical_allels.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('cgMLST.txt'), path('cgMLST_all_identical_allels.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS), emit: standard
+  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations), emit: standard
   path('cgMLST_all_identical_allels.txt'), emit: output
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
   script:
 """
 #!/usr/bin/python
@@ -662,6 +789,22 @@ from all_functions_salmonella import *
 
 species="$SPECIES"
 genus="$GENUS"
+qc_status="$QC_status"
+qc_status_contaminations="$QC_status_contaminations"
+
+if qc_status == "fail" or qc_status_contaminations == "fail":
+    with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_of_allels.txt', 'w') as f2, open('cgMLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+        f2.write(f'ST\\tComment\\n')
+        f2.write(f'unk\\tUnknownn species: {species}')
+
+        f3.write(f'ST\\tComment\\n')
+        f3.write(f'unk\\tUnknown species: {species}')
+    # json na zle QC
+    sys.exit(0)
+
 
 if genus == 'Salmonella':
     sciezka=f'/db/{genus}/cgMLST_v2'
@@ -679,6 +822,7 @@ else:
 
         f3.write(f'ST\\tComment\\n')
         f3.write(f'unk\\tUnknown species: {species}')
+    # json na zly gatunek
     sys.exit(0) 
 
 identified_profile = parse_MLST_blastn('cgMLST.txt')
@@ -766,15 +910,25 @@ process run_prokka {
   cpus params.cpus
   maxForks 5
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('prokka_out/prokka_out*gff'), path('prokka_out/*faa'), path('prokka_out/*.ffn'), path('prokka_out/*.tsv'), val(SPECIES), val(GENUS)
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
+  tuple val(x), path('prokka_out/prokka_out*gff'), path('prokka_out/*faa'), path('prokka_out/*.ffn'), path('prokka_out/*.tsv'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+  //when:
+  //GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
   """
-  prokka --metagenome --cpus ${params.cpus} --outdir prokka_out --prefix prokka_out --compliant --kingdom Bacteria $fasta 
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    mkdir prokka_out; touch prokka_out/prokka_out_dummy.gff; prokka_out/prokka_out_dummy.ffa; prokka_out/prokka_out_dummy.ffn; prokka_out/prokka_out_dummy.tsv
+    # json z informacja o bledzie jakosci
+  else
+    if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
+      prokka --metagenome --cpus ${params.cpus} --outdir prokka_out --prefix prokka_out --compliant --kingdom Bacteria $fasta 
+    else
+      mkdir prokka_out; touch prokka_out/prokka_out_dummy.gff; prokka_out/prokka_out_dummy.ffa; prokka_out/prokka_out_dummy.ffn; prokka_out/prokka_out_dummy.tsv
+      # json z informacja o zlym gatunku
 
+    fi
+  fi
   """
 }
 
@@ -790,32 +944,44 @@ process run_VFDB {
   maxForks 5
   input:
   // inputem jest output procesu run_prokka
-  tuple val(x), path(gff), path(faa), path(ffn), path(tsv), val(SPECIES), val(GENUS)
+  tuple val(x), path(gff), path(faa), path(ffn), path(tsv), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
   tuple val(x), path('VFDB_summary*txt'), val(SPECIES), val(GENUS), emit: non_ecoli
-  tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), val(SPECIES), val(GENUS), optional: true, emit: ecoli
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
+  tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations), optional: true, emit: ecoli
+  //when:
+  //GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
   """
-  SPEC2=""
+  
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    touch VFDB_summary_dummy.txt; touch VFDB_summary_Escherichia.txt  ; touch VFDB_summary_Shigella.txt
+    # json na blad QC
+  else
+    if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
+      SPEC2=""
 
-  if [ "${GENUS}" == "Escherichia" ]; then
-      # for Escherichia we must also check Shigella
-      SPEC2="Shigella"  
-  fi
+      if [ "${GENUS}" == "Escherichia" ]; then
+        # for Escherichia we must also check Shigella
+        SPEC2="Shigella"  
+      fi
 
-  PIDENT=80 # minimalna identycznosc sekwencyjna aby stwierdzic ze jest hit 
-  COV=80 # minimalne pokrycie query i hitu aby stwierdzic ze jest hit 
-  EVAL=0.01  # maksymalne e-value
-  /opt/docker/EToKi/externals/run_VFDB.sh $ffn ${task.cpus} ${GENUS} \${PIDENT} \${EVAL} \${COV}
+      PIDENT=80 # minimalna identycznosc sekwencyjna aby stwierdzic ze jest hit 
+      COV=80 # minimalne pokrycie query i hitu aby stwierdzic ze jest hit 
+      EVAL=0.01  # maksymalne e-value
+      /opt/docker/EToKi/externals/run_VFDB.sh $ffn ${task.cpus} ${GENUS} \${PIDENT} \${EVAL} \${COV}
 
-  mv VFDB_summary.txt VFDB_summary_${GENUS}.txt
+      mv VFDB_summary.txt VFDB_summary_${GENUS}.txt
 
-  if [ \${SPEC2} == "Shigella" ]; then
-    /opt/docker/EToKi/externals/run_VFDB.sh $ffn ${task.cpus} \${SPEC2} \${PIDENT} \${EVAL} \${COV}
-    mv VFDB_summary.txt VFDB_summary_\${SPEC2}.txt
-  fi
+      if [ \${SPEC2} == "Shigella" ]; then
+        /opt/docker/EToKi/externals/run_VFDB.sh $ffn ${task.cpus} \${SPEC2} \${PIDENT} \${EVAL} \${COV}
+        mv VFDB_summary.txt VFDB_summary_\${SPEC2}.txt
+      fi
+    else
+      touch VFDB_summary_dummy.txt; touch VFDB_summary_Escherichia.txt  ; touch VFDB_summary_Shigella.txt
+      # json na bledny rodzaj
+    fi # koniec if-a na rodzja
+  
+  fi # koniec if-a na przejscie QC
   """
 
 }
@@ -826,102 +992,112 @@ process parse_VFDB_ecoli {
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   cpus params.cpus
   input:
-  tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
   tuple val(x), path('VFDB_phenotype.txt')
-  when:
-  GENUS == 'Escherichia'
+  //when:
+  //GENUS == 'Escherichia'
   script:
   """
-    touch VFDB_phenotype.txt
-    ### STEC ###
-    ### Geny STX1 lub 2 
+    if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+       touch VFDB_phenotype.txt
+       # json na zle QC
+    else
+      if [ ${GENUS} == 'Escherichia' ]; then 
+        touch VFDB_phenotype.txt
+        ### STEC ###
+        ### Geny STX1 lub 2 
     
-    STEC=0
-    STEC=`cat VFDB_summary_Escherichia.txt | grep "stx1\\|stx2" | grep -v BRAK | wc -l`
-    GENY_STEC=`cat VFDB_summary_Escherichia.txt | grep "stx1\\|stx2" | grep -v BRAK | cut -f4 | tr "\\n" " "`
-    if [ \${STEC} -gt 0 ]; then
-      echo -e "STEC\\t\${GENY_STEC}" >> VFDB_phenotype.txt
-    fi
-    ### Konice 
+        STEC=0
+        STEC=`cat VFDB_summary_Escherichia.txt | grep "stx1\\|stx2" | grep -v BRAK | wc -l`
+        GENY_STEC=`cat VFDB_summary_Escherichia.txt | grep "stx1\\|stx2" | grep -v BRAK | cut -f4 | tr "\\n" " "`
+        if [ \${STEC} -gt 0 ]; then
+          echo -e "STEC\\t\${GENY_STEC}" >> VFDB_phenotype.txt
+        fi
+        ### Konice 
 
-    ### EPEC ###
-    ### EPEC definiujemy obecnosci intyminy
-    ### ktora wystepuje w wynikach 2 razy jako czesc roznych sciezek (stad head -1 nizej)
+        ### EPEC ###
+        ### EPEC definiujemy obecnosci intyminy
+        ### ktora wystepuje w wynikach 2 razy jako czesc roznych sciezek (stad head -1 nizej)
 
-    EPEC=0
-    # eaeH to nie intymina
-    EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae"  | grep -v BRAK | wc -l`
-    GENY_EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae"  | grep -v BRAK | cut -f4 | tr "\\n" " "`
-    if [ \${EPEC} -gt 0 ]; then
-      echo -e "EPEC\\t\${GENY_EPEC}" >> VFDB_phenotype.txt
-    fi
+        EPEC=0
+        # eaeH to nie intymina
+        EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae"  | grep -v BRAK | wc -l`
+        GENY_EPEC=`cat VFDB_summary_Escherichia.txt | grep -w "eae"  | grep -v BRAK | cut -f4 | tr "\\n" " "`
+        if [ \${EPEC} -gt 0 ]; then
+          echo -e "EPEC\\t\${GENY_EPEC}" >> VFDB_phenotype.txt
+        fi
  
-    ### Koniec
+        ### Koniec
 
-    ### EAEC ###
-    ### Definicja Tomka i VFDB do uzgodnienia
-    ### geny adherence-  aafA; aafB; aafC; aafD 
-    ### geny wirulencji east1 oraz set1a i set1b
-    ### dyspersyna - gen aap
+        ### EAEC ###
+        ### Definicja Tomka i VFDB do uzgodnienia
+        ### geny adherence-  aafA; aafB; aafC; aafD 
+        ### geny wirulencji east1 oraz set1a i set1b
+        ### dyspersyna - gen aap
 
-    ### Geny AggR (kontroler kilku genow w tym dyspersyny), i gen aa1c czesc secration system
+        ### Geny AggR (kontroler kilku genow w tym dyspersyny), i gen aa1c czesc secration system
     
-    EAST=0
-    SET=0  
-    AAF=0 
-    AAP=0 
+        EAST=0
+        SET=0  
+        AAF=0 
+        AAP=0 
 
-    AGGR=0 
-    AAIC=0
+        AGGR=0 
+        AAIC=0
  
-    EAST=`cat VFDB_summary_Escherichia.txt | grep -w east1 | grep -v BRAK | wc -l`
-    SET=`cat VFDB_summary_Escherichia.txt | grep "set1A\\|set1B" | grep -v BRAK | wc -l`
-    AAF=`cat VFDB_summary_Escherichia.txt | grep "aafA\\|aafB\\|aafC\\|aafD" | grep -v BRAK | wc -l`
-    AAP=`cat VFDB_summary_Escherichia.txt | grep -w aap | grep -v BRAK | wc -l`
+        EAST=`cat VFDB_summary_Escherichia.txt | grep -w east1 | grep -v BRAK | wc -l`
+        SET=`cat VFDB_summary_Escherichia.txt | grep "set1A\\|set1B" | grep -v BRAK | wc -l`
+        AAF=`cat VFDB_summary_Escherichia.txt | grep "aafA\\|aafB\\|aafC\\|aafD" | grep -v BRAK | wc -l`
+        AAP=`cat VFDB_summary_Escherichia.txt | grep -w aap | grep -v BRAK | wc -l`
 
-    AGGR=`cat VFDB_summary_Escherichia.txt | grep -w aggR | grep -v BRAK | wc -l`
-    AAIC=`cat VFDB_summary_Escherichia.txt | grep -w aaic-hcp |  grep -v BRAK | wc -l`
+        AGGR=`cat VFDB_summary_Escherichia.txt | grep -w aggR | grep -v BRAK | wc -l`
+        AAIC=`cat VFDB_summary_Escherichia.txt | grep -w aaic-hcp |  grep -v BRAK | wc -l`
  
-    if [ \${AGGR} -gt 0 ] && [ \${AAIC} -gt 0 ] ; then 
-      echo -e "EAEC\\taggR\\taaiC" >> VFDB_phenotype.txt
-    elif [ \${AGGR} -gt 0 ]; then
-      echo -e "EAEC\\taggR" >> VFDB_phenotype.txt
-    elif [ \${AAIC} -gt 0 ]; then
-      echo -e "EAEC\\taaiC" >> VFDB_phenotype.txt
-    fi
+        if [ \${AGGR} -gt 0 ] && [ \${AAIC} -gt 0 ] ; then 
+          echo -e "EAEC\\taggR\\taaiC" >> VFDB_phenotype.txt
+        elif [ \${AGGR} -gt 0 ]; then
+          echo -e "EAEC\\taggR" >> VFDB_phenotype.txt
+        elif [ \${AAIC} -gt 0 ]; then
+          echo -e "EAEC\\taaiC" >> VFDB_phenotype.txt
+        fi
 
-    ### Konice
+        ### Konice
 
-    ### EIEC ###
-    ### Tu jest prosta definicaja ale gen jest nie w bazie Ecoli a w bazie Shigella
-    IPAH=0
+        ### EIEC ###
+        ### Tu jest prosta definicaja ale gen jest nie w bazie Ecoli a w bazie Shigella
+        IPAH=0
   
-    IPAH=`cat VFDB_summary_Shigella.txt | grep ipaH | grep -v BRAK | wc -l`
-    IPAH_GENES=`cat VFDB_summary_Shigella.txt | grep ipaH | grep -v BRAK |  cut -f4 | tr "\\n" " "`
-    if [ \${IPAH} -gt 0 ]; then
-        echo -e "EIEC\\t\${IPAH_GENES}" >> VFDB_phenotype.txt
-    fi
+        IPAH=`cat VFDB_summary_Shigella.txt | grep ipaH | grep -v BRAK | wc -l`
+        IPAH_GENES=`cat VFDB_summary_Shigella.txt | grep ipaH | grep -v BRAK |  cut -f4 | tr "\\n" " "`
+        if [ \${IPAH} -gt 0 ]; then
+            echo -e "EIEC\\t\${IPAH_GENES}" >> VFDB_phenotype.txt
+        fi
    
-    ### Koniec 
+        ### Koniec 
 
-    ### ETEC ###
-    ELT=0 # Heat liable # wiele izoform
-    EST=0 # Heat Stable
+        ### ETEC ###
+        ELT=0 # Heat liable # wiele izoform
+        EST=0 # Heat Stable
    
-    ELT=`cat VFDB_summary_Escherichia.txt | grep elt | grep -v BRAK | wc -l`
-    ELT_GENES=`cat VFDB_summary_Escherichia.txt | grep elt | grep -v BRAK | cut -f4 | tr "\\n" " "`
-    EST=`cat VFDB_summary_Escherichia.txt | grep estIa | grep -v BRAK | wc -l`  
+        ELT=`cat VFDB_summary_Escherichia.txt | grep elt | grep -v BRAK | wc -l`
+        ELT_GENES=`cat VFDB_summary_Escherichia.txt | grep elt | grep -v BRAK | cut -f4 | tr "\\n" " "`
+        EST=`cat VFDB_summary_Escherichia.txt | grep estIa | grep -v BRAK | wc -l`  
    
-    if [ \${ELT} -gt 0 ] && [ \${EST} -gt 0 ] ; then
-      echo -e "ETEC\\t\${ELT_GENES}\\testIa" >> VFDB_phenotype.txt
-    elif [ \${ELT} -gt 0 ]; then
-      echo -e "ETEC\\t\${ELT_GENES}" >> VFDB_phenotype.txt
-    elif [ \${EST} -gt 0 ]; then
-      echo -e "ETEC\testIa" >> VFDB_phenotype.txt
-    fi
+        if [ \${ELT} -gt 0 ] && [ \${EST} -gt 0 ] ; then
+          echo -e "ETEC\\t\${ELT_GENES}\\testIa" >> VFDB_phenotype.txt
+        elif [ \${ELT} -gt 0 ]; then
+          echo -e "ETEC\\t\${ELT_GENES}" >> VFDB_phenotype.txt
+        elif [ \${EST} -gt 0 ]; then
+          echo -e "ETEC\testIa" >> VFDB_phenotype.txt
+        fi
 
-    ### Koniec  
+        ### Koniec  
+    else
+      touch VFDB_phenotype.txt
+      # json na zly gatunek
+    fi # koniec if-a na zly gatunek
+  fi # Koniec if-a na Quality
   """
 }
 
@@ -933,7 +1109,7 @@ process run_spifinder {
   // cpus params.cpus
   // maxForks 5
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('spifinder_results/*')
   when:
@@ -946,7 +1122,17 @@ process run_spifinder {
   # -l i -t to parametrty na alignment coverage i seq id
   # -x to rozszerzony output
 
-  python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then  
+    touch spifinder_results/dummy_file.txt
+    # json na zle QC
+  else
+    if [ ${GENUS} == "Salmonella" ]; then
+      python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
+    else
+      touch spifinder_results/dummy_file.txt
+      # json na zly gatunek
+    fi # koniec if-a na zly gatunek
+  fi # koniec if-a na zle QC
   """
 }
 
@@ -1208,11 +1394,11 @@ process run_pHierCC_local {
   tag "Predicting hierCC with local database for sample $x"
   publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
-  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS),  val(QC_status), val(QC_status_contaminations)
   output:
   tuple val(x), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt')
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
   script:
 """
 #!/usr/bin/python
@@ -1220,6 +1406,22 @@ import  sys
 import gzip
 import re
 import numpy as np
+
+
+qc_status="$QC_status"
+qc_status_contaminations="$QC_status_contaminations"
+
+if qc_status == "fail" or qc_status_contaminations == "fail":
+    with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f1, open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f2:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+        f2.write(f'ST\\tComment\\n')
+        f2.write(f'unk\\tUnknownn species: {species}')
+
+    # json na zle QC
+    sys.exit(0)
+
 
 def getST(my_file):
     with open(my_file) as f:
@@ -1255,6 +1457,7 @@ else:
     with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f1, open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f2:
         f1.write('Provided species: {species} is not part of any cgMLST scheme')
         f2.write('Provided species: {species} is not part of any cgMLST scheme')
+        # json na zly gatunek
         sys.exit(0)
 
 # 1. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
@@ -1532,7 +1735,7 @@ process run_amrfinder {
   publishDir "pipeline_wyniki/${x}/AMRplus_fider", mode: 'copy', pattern: "AMRfinder*"
   containerOptions "--volume ${params.AMRFINDER_db_absolute_path_on_host}:/AMRfider"
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt')
   // -n input, plik z sekwencja nukleotydowa
@@ -1545,16 +1748,27 @@ process run_amrfinder {
   // The 'plus' subset include a less-selective set of genes of interest including genes involved in virulence, biocide, heat, metal, and acid resistance
   // --blast_bin input sciezka do binarek blast-a, podaje wxplicite po w kontenerze sa 2 binarki blasta te z etoki i instalowane recznie
   // Te z etoki sa za stare 
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
   """
-
-  amrfinder --blast_bin /blast/bin -n $fasta -d /AMRfider  -i 0.9 -c 0.5 -o initial_output.txt -O ${GENUS} --plus 
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    touch AMRfinder_resistance.txt
+    touch AMRfinder_virulence.txt
+    # json z wynikami
+    # Komentarz NIE uzywac exit 0 wewnatrz script
+  else
+    if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
+      amrfinder --blast_bin /blast/bin -n $fasta -d /AMRfider  -i 0.9 -c 0.5 -o initial_output.txt -O ${GENUS} --plus 
  
-  cat initial_output.txt  | awk 'BEGIN{FS="\\t"}; {if(\$9 == "AMR" || \$1 == "Protein identifier") print \$0}' > AMRfinder_resistance.txt
-  cat initial_output.txt  | awk 'BEGIN{FS="\\t"}; {if(\$9 == "VIRULENCE" || \$1 == "Protein identifier") print \$0}' > AMRfinder_virulence.txt
-
+      cat initial_output.txt  | awk 'BEGIN{FS="\\t"}; {if(\$9 == "AMR" || \$1 == "Protein identifier") print \$0}' > AMRfinder_resistance.txt
+      cat initial_output.txt  | awk 'BEGIN{FS="\\t"}; {if(\$9 == "VIRULENCE" || \$1 == "Protein identifier") print \$0}' > AMRfinder_virulence.txt
+    else
+      touch AMRfinder_resistance.txt
+      touch AMRfinder_virulence.txt
+      # json z wynikami
+    fi
+  fi
   """ 
 }
 
@@ -1569,11 +1783,11 @@ process run_plasmidfinder {
   tag "Predicting plasmids for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('plasmidfinder/results_tab.tsv')
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
   """
   # -i to oczywiscie input na podstawie jego rozszerzenia program wybiera metode do analizy (kma dla fastq i blastn dla fasta)
@@ -1582,8 +1796,19 @@ process run_plasmidfinder {
   # -l to minimalny procent sekwencji jaki musi alignowac sie na genom
   # -t to minimalne sequence identity miedzy query a subject
   # -x printuj dodatkowe dane w output (alignmenty)
-  mkdir plasmidfinder # program wymaga tworzenia katalogu samodzielnie
-  /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder -p /opt/docker/plasmidfinder_db -l 0.6 -t 0.9 -x
+  
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    mkdir plasmidfinder; touch plasmidfinder/results_tab.tsv
+    # json zle QC
+  else  
+    if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
+      mkdir plasmidfinder # program wymaga tworzenia katalogu samodzielnie
+      /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder -p /opt/docker/plasmidfinder_db -l 0.6 -t 0.9 -x
+    else
+      mkdir plasmidfinder; touch plasmidfinder/results_tab.tsv
+     # json zly gatunek
+    fi
+  fi
   """
 }
 
@@ -1592,11 +1817,11 @@ process run_virulencefinder {
   tag "Predicting plasmids for sample $x"
   publishDir "pipeline_wyniki/${x}/virulencefinder", mode: 'copy', pattern: "results_tab.tsv"
   input:
-  tuple val(x), path(fasta), val(SPECIES), val(GENUS)
+  tuple val(x), path(fasta),  val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('results_tab.tsv')
-  when:
-  GENUS == 'Escherichia'
+  // when:
+  // GENUS == 'Escherichia'
   script:
   """
   # -i to oczywiscie input na podstawie jego rozszerzenia program wybiera metode do analizy (kma dla fastq i blastn dla fasta)
@@ -1609,8 +1834,19 @@ process run_virulencefinder {
   # nie wiem czy to kwestia niezgodnosci mojego virulencefindera z bazami
   # ale program printuje mase output (choc tworzy poprawne pliki w koncu to parser blasta)
   mkdir virulencefinder # program wymaga tworzenia katalogu samodzielnie
-  /opt/docker/virulencefinder/virulencefinder.py  -i $fasta -o virulencefinder -p /opt/docker/virulencefinder_db  -d virulence_ecoli -l 0.6 -t 0.9 -x >> log 2>&1
-  cp virulencefinder/results_tab.tsv .
+
+  if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    touch results_tab.tsv
+    # json na zle QC
+  else
+    if [ ${GENUS} == "Escherichia" ]; then
+      /opt/docker/virulencefinder/virulencefinder.py  -i $fasta -o virulencefinder -p /opt/docker/virulencefinder_db  -d virulence_ecoli -l 0.6 -t 0.9 -x >> log 2>&1
+      cp virulencefinder/results_tab.tsv .
+    else
+      touch results_tab.tsv
+      #json na zly gatunek
+    fi # koniec if-a na zly gatunek
+  fi # koniec if-a na zle QC
   """
 }
 
@@ -1629,15 +1865,27 @@ input:
 tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'), path('report_metaphlan_SGB.txt'), path('report_metaphlan_species.txt'), path('report_metaphlan_genera.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS)
 
 output:
-tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), emit: species
-path('predicted_genus_and_species.txt'), emit: fo_pubdir
+tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contaminations), emit: species
+path('predicted_genus_and_species.txt'), emit: to_pubdir 
 
 script:
 """
+QC_status_contaminations="pass"
 PRE_FINALE_SPECIES=""
 cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
 cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1}' | sed s'/s__//'g | sed s'/_/ /'g >> intermediate.txt
 echo ${KMERFINDER_SPECIES} | cut -d ' ' -f1-2 >> intermediate.txt
+
+KRAKEN_GENUS_LEVEL=`cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print int(\$1)}'`
+METAPHLAN_GENUS_LEVEL=`cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print int(\$3)}'`
+KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f11 | awk '{print int (\$1)}'`
+
+if [[ ${KRAKEN_GENUS_LEVEL} -lt 50 && ${METAPHLAN_GENUS_LEVEL} -lt 50 && KMERFINDER_COVERAGE -lt 30 ]]; then
+# kraken2 i metaphlan zwracaja ponziej 50% odczytow nalezacych do glownego gatunku
+# kmerfinder zwraca pokrycie pierwszego gatunku ponad 30 
+QC_status_contaminations="fail"
+fi
+
 PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
 
 
@@ -1725,6 +1973,8 @@ process run_flye {
       GENOME_SIZE="5m" # trafilem na zly organizm wiec wpisuje 5m ten genom i tak nie bedzie wykorzystany
   fi
   /opt/docker/Flye/bin/flye --nano-raw ${fastq_gz} -g \${GENOME_SIZE} -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
+
+  
 
   """
  
@@ -1933,14 +2183,25 @@ input:
 tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS)
 
 output:
-tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), emit: species
+tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contaminations), emit: species
 path('predicted_genus_and_species.txt'), emit: output
 script:
 """
+QC_status_contaminations="pass"
 PRE_FINALE_SPECIES=""
 cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
 echo ${KMERFINDER_SPECIES} | cut -d ' ' -f1-2  >> intermediate.txt
 PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
+
+KRAKEN_GENUS_LEVEL=`cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print int(\$1)}'`
+KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f11 | awk '{print int (\$1)}'`
+
+if [[ ${KRAKEN_GENUS_LEVEL} -lt 50 && KMERFINDER_COVERAGE -lt 30 ]]; then
+# kraken2 zwraca mniej nizd 50% odczytow nalezacych do glownego gatunku
+# kmerfinder zwraca pokrycie pierwszego gatunku ponizej 30
+QC_status_contaminations="fail"
+fi
+
 
 if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then
     FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
@@ -2229,10 +2490,11 @@ initial_scaffold = run_flye(processed_fastq.join(predict_species_out))
 
 
 // Assembly quality
-extract_final_stats(final_assembly_with_reject)
+(extract_final_stats_statistics, extract_final_stats_genome) = extract_final_stats(final_assembly_with_reject)
+ 
 
 // Species prediction with Achtman and core genome shemes
-final_assembly_with_species = final_assembly.join(predict_species_out, by : 0)
+final_assembly_with_species = extract_final_stats_genome.join(predict_species_out, by : 0)
 MLST_out = run_7MLST(final_assembly_with_species)
 parse_7MLST(MLST_out)
 
