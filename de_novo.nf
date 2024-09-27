@@ -583,7 +583,8 @@ process run_Seqsero {
     if [ ${GENUS} == "Salmonella" ]; then
       python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p 4 -i $fasta -d seqsero
     else
-      touch SeqSero_result.txt
+      mkdir seqsero
+      touch seqsero/SeqSero_result.txt
       #json na zly gatunek
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC
@@ -2066,13 +2067,13 @@ process run_flye {
   ### QC_status_contaminations na razie ignorujemy, zostanie ono przekazane do kanalu jeszcze raz po zaproponowaniu genomu
   ### i tam bedzie uzywane
 
-  QC_status = "pass"
+  QC_status="pass"
   ### Tutaj umieszcamy warunki na QC_status zwiazny ze startowa sekwencja (np za malo odczytow)
   #### Do ustalenia, poki co 1000 czyli skrajnie malo
   NO_READS=`zcat $fastq_gz | grep "^+" | wc -l`
   
-  if [ \${NO_READS} -lt 1000 ]; then
-    QC_status = "fail"
+  if [ \${NO_READS} -lt 10000 ]; then
+    QC_status="fail"
     mkdir output
     echo ">dummy_contig" >> output/assembly.fasta
     echo "AAAAAAAAAAAAA" >> output/assembly.fasta
