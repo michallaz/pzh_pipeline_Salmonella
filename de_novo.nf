@@ -163,7 +163,8 @@ process run_initial_mlst_illumina {
 
   # Parsowanie wyniku
 
-  # Warunki do QC
+  # Warunki do QC 
+  QC_status="pass"
   """
 }
 
@@ -250,7 +251,7 @@ process bwa_paired {
   script:
   """
 
-  if [ ${QC_status == "fail" ]; then
+  if [ ${QC_status} == "fail" ]; then
       touch mapowanie_bwa_PE.bam
   else
     /opt/docker/EToKi/externals/bwa index genomic_fasta.fasta
@@ -273,7 +274,7 @@ process bwa_single {
   // bwa_single przekazuje QC_status do merge_bams, nie ma potrzeby aby robily to oba moduly do bwa
   script:
   """
-  if [ ${QC_status == "fail" ]; then
+  if [ ${QC_status} == "fail" ]; then
      touch mapowanie_bwa_SE.bam
   else
     /opt/docker/EToKi/externals/bwa index genomic_fasta.fasta
@@ -316,7 +317,7 @@ process run_pilon {
   tuple val(x), path('latest_pilon.fasta'), val(QC_status), emit: ONLY_GENOME
   script:
   """
-  if [ ${QC_status == "fail" ]; then
+  if [ ${QC_status} == "fail" ]; then
     echo ">dummy_contig" >> latest_pilon.fasta
     echo "AAAAAAAAAAAAA" >> latest_pilon.fasta
     touch latest_pilon.changes  
@@ -353,7 +354,7 @@ process extract_final_contigs {
   // final_scaffold_filtered.fa to nazwa ustawiona NA SZTYWNO w skrypcie coverage_filter.py
   script:
   """
-  if [ ${QC_status == "fail" ]; then
+  if [ ${QC_status} == "fail" ]; then
     touch final_scaffold_filtered.fa
     touch Rejected_contigs.fa   
   else
@@ -374,7 +375,7 @@ process extract_final_stats {
   tuple val(x), path(fasta), env(QC_status), emit: GENOME
   script:
   """
-  if [ ${QC_status == "fail" ]; then
+  if [ ${QC_status} == "fail" ]; then
      touch Summary_statistics.txt
      touch Summary_statistics_with_reject.txt
      QC_status="fail" # jako ze output to env, musimy w srodowisku ustalic ta zmienne inaczej program nie "przechwyci" do output QC_status
@@ -575,7 +576,8 @@ process run_Seqsero {
   # -p to procki, proces jest szybki wiec ustawie 4 + maxforks 15
 
   if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
-    touch SeqSero_result.txt
+    mkdir seqsero
+    touch seqsero/SeqSero_result.txt
     #json na zle QC
   else
     if [ ${GENUS} == "Salmonella" ]; then
@@ -758,9 +760,9 @@ process run_cgMLST {
     else
          # This should never happen
          echo "Provided species $SPECIES is not part of any cgMLST databases" >> log.log
-    fi koniec if-a na zly gatunek
+    fi # koniec if-a na zly gatunek
     cat log.log | cut -f1,2 > cgMLST.txt
-  fi koniec if-a na zle QC
+  fi # koniec if-a na zle QC
   """
 }
 
@@ -918,7 +920,7 @@ process run_prokka {
   script:
   """
   if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
-    mkdir prokka_out; touch prokka_out/prokka_out_dummy.gff; prokka_out/prokka_out_dummy.ffa; prokka_out/prokka_out_dummy.ffn; prokka_out/prokka_out_dummy.tsv
+    mkdir prokka_out; touch prokka_out/prokka_out_dummy.gff; touch prokka_out/prokka_out_dummy.faa; touch prokka_out/prokka_out_dummy.ffn; touch prokka_out/prokka_out_dummy.tsv
     # json z informacja o bledzie jakosci
   else
     if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
@@ -1112,8 +1114,8 @@ process run_spifinder {
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('spifinder_results/*')
-  when:
-  GENUS == 'Salmonella'  
+  // when:
+  // GENUS == 'Salmonella'  
   script:
   """
   mkdir spifinder_results # program wymaga tworzenia katalogu samodzielnie
@@ -1241,11 +1243,11 @@ process run_pHierCC_enterobase {
   tag "Predicting hierCC from enterobase for sample $x"
   publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
-  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES), val(GENUS)
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia'
+  tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia'
   script:
 """
 #!/usr/bin/python
@@ -1261,6 +1263,20 @@ import gzip
 import re
 import numpy as np
 import time
+
+species="$SPECIES"
+genus="$GENUS"
+qc_status="$QC_status"
+qc_status_contaminations="$QC_status_contaminations"
+
+if qc_status == "fail" or qc_status_contaminations == "fail":
+    with open('parsed_phiercc_enterobase.txt', 'w') as f1:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+
+    # json na zle QC
+    sys.exit(0)
 
 time.sleep(np.random.randint(2,20))
 
@@ -1283,8 +1299,6 @@ def getST(my_file):
                 # the second line in a file is what we want
                 return line[0], line[1], int(line[2])
 
-species="$SPECIES"
-genus="$GENUS"
 
 ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
 
@@ -1302,6 +1316,7 @@ else:
     with open('parsed_phiercc_enterobase.txt', 'w') as f:
         f.write('Provided genus: {genus} is not part of the Enterobase')
     sys.exit(0)
+    # json for wrong species
 
 with open('parsed_phiercc_enterobase.txt', 'w') as f:
     f.write(phiercc_header)
@@ -1331,11 +1346,11 @@ process run_pHierCC_pubmlst {
   tag "Predicting hierCC with local database for sample $x"
   publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
-  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS),  val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('parsed_phiercc_pubmlst.txt'), val(SPECIES), val(GENUS)
-  when:
-  SPECIES == 'jejuni'
+  tuple val(x), path('parsed_phiercc_pubmlst.txt'), val(SPECIES), val(GENUS),  val(QC_status), val(QC_status_contaminations)
+  //when:
+  //SPECIES == 'jejuni'
   script:
 """
 #!/usr/bin/python
@@ -1343,6 +1358,21 @@ import  sys
 import gzip
 import re
 import numpy as np
+
+species="$SPECIES"
+genus="$GENUS"
+qc_status="$QC_status"
+qc_status_contaminations="$QC_status_contaminations"
+
+if qc_status == "fail" or qc_status_contaminations == "fail":
+    with open('parsed_phiercc_pubmlst.txt', 'w') as f1:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+
+    # json na zle QC
+    sys.exit(0)
+
 
 def getST(my_file):
     with open(my_file) as f:
@@ -1355,8 +1385,15 @@ def getST(my_file):
                 # the second line in a file is what we want
                 return line[0], line[1], int(line[2])
 
-species="$SPECIES"
-genus="$GENUS"
+
+if species != "jejuni":
+    with open('parsed_phiercc_pubmlst.txt', 'w') as f1:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+
+    # json na zly gatunek
+    sys.exit(0)
 
 ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
 
@@ -1407,7 +1444,8 @@ import gzip
 import re
 import numpy as np
 
-
+species="$SPECIES"
+genus="$GENUS"
 qc_status="$QC_status"
 qc_status_contaminations="$QC_status_contaminations"
 
@@ -1433,9 +1471,6 @@ def getST(my_file):
             else:
                 # the second line in a file is what we want
                 return line[0], line[1], int(line[2])
-
-species="$SPECIES"
-genus="$GENUS"
 
 ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
 
@@ -1546,11 +1581,11 @@ process extract_historical_data_enterobase {
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
-  tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES), val(GENUS),  val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES), val(GENUS)
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia'
+  tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia'
   script:
 """
 #!/usr/bin/python
@@ -1559,6 +1594,26 @@ import sys
 import re 
 species="${SPECIES}"
 genus="$GENUS"
+
+qc_status="$QC_status"
+qc_status_contaminations="$QC_status_contaminations"
+
+if qc_status == "fail" or qc_status_contaminations == "fail":
+    with open('enterobase_historical_data.txt', 'w') as f1:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+    # json na zle QC
+    sys.exit(0)
+
+if genus != 'Salmonella' and genus != 'Escherichia':
+    with open('enterobase_historical_data.txt', 'w') as f1:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+    # json na zle QC 
+    sys.exit(0)
+
 def get_hiercc_level(my_file):
     with open(my_file) as f:
         i = 0
@@ -1625,17 +1680,28 @@ process plot_historical_data_enterobase {
   tag "Plot historical data for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
-  tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
   tuple val(x), path('enterobase_historical_data.html')
-  when:
-  GENUS == 'Salmonella' || GENUS == 'Escherichia'
+  // when:
+  // GENUS == 'Salmonella' || GENUS == 'Escherichia'
   script:
 // The script requires a geojeson file that is a part of our container 
 // The 3 parameters are input file, output prefix, year fromwhich plot the data, data before that year are ignored (to save html size)
 // Same options are used for pubmlst version of that script
 """
-python /data/plot_historical_data_plotly.py enterobase_historical_data.txt enterobase_historical_data 2009
+if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    # Tworzenie json i output
+    touch enterobase_historical_data.html
+    
+else
+  if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" ]]; then
+    python /data/plot_historical_data_plotly.py enterobase_historical_data.txt enterobase_historical_data 2009
+  else
+    touch enterobase_historical_data.html
+    # json na zly gatunek
+  fi
+fi
 """
 
 }
@@ -1650,11 +1716,11 @@ process extract_historical_data_pubmlst {
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
-  tuple val(x), path('parsed_phiercc_pubmlst.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('parsed_phiercc_pubmlst.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES), val(GENUS)
-  when:
-  SPECIES == 'jejuni'
+  tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+  // when:
+  // SPECIES == 'jejuni'
 
   script:
 """
@@ -1663,6 +1729,28 @@ import numpy as np
 import sys
 import re
 species="${SPECIES}"
+
+qc_status="$QC_status"
+qc_status_contaminations="$QC_status_contaminations"
+
+if qc_status == "fail" or qc_status_contaminations == "fail":
+    with open('pubmlst_historical_data.txt', 'w') as f1:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+    # json na zle QC
+    sys.exit(0)
+
+if species != 'jejuni':
+    with open('pubmlst_historical_data.txt', 'w') as f1:
+        f1.write(f'ST\\tComment\\n')
+        f1.write(f'unk\\tUnknown species: {species}\\n')
+
+    # json na zle QC
+    sys.exit(0)
+
+
+
 def get_hiercc_level(my_file):
     with open(my_file) as f:
         i = 0
@@ -1716,15 +1804,27 @@ process plot_historical_data_pubmlst {
   tag "Plot historical data for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
-  tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES), val(GENUS)
+  tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
   tuple val(x), path('*html')
-  when:
-  SPECIES == 'jejuni'
+  // when:
+  // SPECIES == 'jejuni'
   script:
 // The script requires a geojeson file that is a part of our container
 """
-python /data/plot_historical_data_plotly.py pubmlst_historical_data.txt pubmlst_historical_data 2009
+
+if [[ ${QC_status} == "fail"  || ${QC_status_contaminations} == "fail" ]]; then
+    # Tworzenie json i output
+    touch empty.html
+
+else
+  if [ ${SPECIES} == "jejuni" ]; then
+    python /data/plot_historical_data_plotly.py pubmlst_historical_data.txt pubmlst_historical_data 2009
+  else
+    touch empty.html
+    # json na zly gatunek
+  fi
+fi
 """
 
 }
@@ -1880,7 +1980,7 @@ KRAKEN_GENUS_LEVEL=`cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 
 METAPHLAN_GENUS_LEVEL=`cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print int(\$3)}'`
 KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f11 | awk '{print int (\$1)}'`
 
-if [[ ${KRAKEN_GENUS_LEVEL} -lt 50 && ${METAPHLAN_GENUS_LEVEL} -lt 50 && KMERFINDER_COVERAGE -lt 30 ]]; then
+if [[ \${KRAKEN_GENUS_LEVEL} -lt 50 && \${METAPHLAN_GENUS_LEVEL} -lt 50 && \${KMERFINDER_COVERAGE} -lt 30 ]]; then
 # kraken2 i metaphlan zwracaja ponziej 50% odczytow nalezacych do glownego gatunku
 # kmerfinder zwraca pokrycie pierwszego gatunku ponad 30 
 QC_status_contaminations="fail"
@@ -1954,25 +2054,41 @@ process run_flye {
   // hence I increased maxforks to 10
   maxForks 10 
   input:
-  tuple val(x), path(fastq_gz), val(SPECIES), val(GENUS)
+  tuple val(x), path(fastq_gz), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('output/assembly.fasta') 
+  tuple val(x), path('output/assembly.fasta'), env(QC_status)
   
   script:
   """
   # /data/Flye to sciezka z Flye instalowanego z github, uwaga
   # w kontenerze tez jest flye instalowant przez etoki i ten jest w PATH
 
-  if [[ "${GENUS}" == *"Salmo"* ]]; then
-      GENOME_SIZE="5.4m"
-  elif [[ "${GENUS}" == *"Escher"* ]]; then
-      GENOME_SIZE="4.6m"
-  elif [ ${GENUS} == "Campylobacter" ]; then
-      GENOME_SIZE="1.8m"
+  ### QC_status_contaminations na razie ignorujemy, zostanie ono przekazane do kanalu jeszcze raz po zaproponowaniu genomu
+  ### i tam bedzie uzywane
+
+  QC_status = "pass"
+  ### Tutaj umieszcamy warunki na QC_status zwiazny ze startowa sekwencja (np za malo odczytow)
+  #### Do ustalenia, poki co 1000 czyli skrajnie malo
+  NO_READS=`zcat $fastq_gz | grep "^+" | wc -l`
+  
+  if [ \${NO_READS} -lt 1000 ]; then
+    QC_status = "fail"
+    mkdir output
+    echo ">dummy_contig" >> output/assembly.fasta
+    echo "AAAAAAAAAAAAA" >> output/assembly.fasta
   else
-      GENOME_SIZE="5m" # trafilem na zly organizm wiec wpisuje 5m ten genom i tak nie bedzie wykorzystany
+    if [[ "${GENUS}" == *"Salmo"* ]]; then
+        GENOME_SIZE="5.4m"
+    elif [[ "${GENUS}" == *"Escher"* ]]; then
+        GENOME_SIZE="4.6m"
+    elif [ ${GENUS} == "Campylobacter" ]; then
+        GENOME_SIZE="1.8m"
+    else
+        GENOME_SIZE="5m" # trafilem na zly organizm wiec wpisuje 5m ten genom i tak nie bedzie wykorzystany
+    fi
+    /opt/docker/Flye/bin/flye --nano-raw ${fastq_gz} -g \${GENOME_SIZE} -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
   fi
-  /opt/docker/Flye/bin/flye --nano-raw ${fastq_gz} -g \${GENOME_SIZE} -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
+
 
   
 
@@ -2002,15 +2118,18 @@ process run_minimap2 {
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   maxForks 5
   input:
-  tuple val(x), path(fasta), path(reads) 
+  tuple val(x), path(fasta), val(QC_status), path(reads) 
   output:
-  tuple val(x), path('sorted.bam'), path(fasta)
+  tuple val(x), path('sorted.bam'), path(fasta), val(QC_status)
   script:
   """
   # minmap jest zarowno w PATH z etoki/externals jak i w /data/Flye/bin
-
-  minimap2 -a -x map-ont -t ${params.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${params.cpus} -o sorted.bam -
-  
+  if [ ${QC_status} == "fail" ]; then
+    touch sorted.bam
+    # dummy output aby skypt poszedl dalej
+  else
+    minimap2 -a -x map-ont -t ${params.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${params.cpus} -o sorted.bam -
+  fi
   """
 }
 
@@ -2022,15 +2141,19 @@ process run_minimap2_2nd {
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   maxForks 5
   input:
-  tuple val(x), path(fasta), path(reads)
+  tuple val(x), path(fasta), val(QC_status), path(reads)
   output:
-  tuple val(x), path('sorted.bam'), path(fasta)
+  tuple val(x), path('sorted.bam'), path(fasta), val(QC_status)
   script:
   """
-  # minmap jest zarowno w PATH z etoki/externals jak i w /data/Flye/bin
+  if [ ${QC_status} == "fail" ]; then
+    touch sorted.bam
+    # dummy output aby skypt poszedl dalej
+  else
+    # minmap jest zarowno w PATH z etoki/externals jak i w /data/Flye/bin
 
-  minimap2 -a -x map-ont -t ${params.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${params.cpus} -o sorted.bam -
-
+    minimap2 -a -x map-ont -t ${params.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${params.cpus} -o sorted.bam -
+  fi
   """
 }
 
@@ -2072,38 +2195,42 @@ process run_medaka {
   // publishDir "pipeline_wyniki/${x}/medaka", mode: 'copy', pattern: 'latest_pilon.*'
   maxForks 5
   input:
-  tuple val(x), path(bam1), path(fasta)
+  tuple val(x), path(bam1), path(fasta), val(QC_status)
   output:
   // tuple val(x), path('postmedaka.fasta'), path('medaka_annotated_filtered.vcf.gz'), emit: ALL
-  tuple val(x), path('postmedaka.fasta'), emit: ONLY_GENOME
+  tuple val(x), path('postmedaka.fasta'), val(QC_status), emit: ONLY_GENOME
   script:
   """
-  # indeksacja bam-ow
-  samtools index $bam1
+  if [ ${QC_status} == "fail" ]; then
+    echo ">dummy_contig" >> postmedaka.fasta
+    echo "AAAAAAAAAAAAA" >> postmedaka.fasta
+  else
+    # indeksacja bam-ow
+    samtools index $bam1
  
-  MODEL="r941_min_hac_g507"  
+    MODEL="r941_min_hac_g507"  
   
-  medaka inference --model \${MODEL} \
+    medaka inference --model \${MODEL} \
                      --threads ${params.cpus} \
                      $bam1 \
                      forvariants.hdf
 
   
-  medaka vcf forvariants.hdf  $fasta medaka.vcf
-  medaka tools annotate medaka.vcf $fasta $bam1 medaka_annotated.vcf
-  bcftools sort medaka_annotated.vcf >> medaka_annotated_sorted.vcf
-  bgzip medaka_annotated_sorted.vcf
-  tabix medaka_annotated_sorted.vcf.gz
+    medaka vcf forvariants.hdf  $fasta medaka.vcf
+    medaka tools annotate medaka.vcf $fasta $bam1 medaka_annotated.vcf
+    bcftools sort medaka_annotated.vcf >> medaka_annotated_sorted.vcf
+    bgzip medaka_annotated_sorted.vcf
+    tabix medaka_annotated_sorted.vcf.gz
   
-  qual=13
-  min_cov=20
+    qual=13
+    min_cov=20
   
-  bcftools filter -O z -o medaka_annotated_filtered.vcf.gz -i "GQ > \${qual} && DP >= \${min_cov}" medaka_annotated_sorted.vcf.gz
-  tabix medaka_annotated_filtered.vcf.gz
+    bcftools filter -O z -o medaka_annotated_filtered.vcf.gz -i "GQ > \${qual} && DP >= \${min_cov}" medaka_annotated_sorted.vcf.gz
+    tabix medaka_annotated_filtered.vcf.gz
 
 
-  cat $fasta | bcftools consensus medaka_annotated_filtered.vcf.gz >> postmedaka.fasta
-  
+    cat $fasta | bcftools consensus medaka_annotated_filtered.vcf.gz >> postmedaka.fasta
+  fi
   """
 }
 
@@ -2196,7 +2323,7 @@ PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rn
 KRAKEN_GENUS_LEVEL=`cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print int(\$1)}'`
 KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f11 | awk '{print int (\$1)}'`
 
-if [[ ${KRAKEN_GENUS_LEVEL} -lt 50 && KMERFINDER_COVERAGE -lt 30 ]]; then
+if [[ \${KRAKEN_GENUS_LEVEL} -lt 50 && \${KMERFINDER_COVERAGE} -lt 30 ]]; then
 # kraken2 zwraca mniej nizd 50% odczytow nalezacych do glownego gatunku
 # kmerfinder zwraca pokrycie pierwszego gatunku ponizej 30
 QC_status_contaminations="fail"
