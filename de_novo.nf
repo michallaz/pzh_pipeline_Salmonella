@@ -1960,15 +1960,17 @@ process run_virulencefinder {
 
 process get_species_illumina {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
+container  = 'salmonella_illumina:2.0'
 tag "Predicting species for ${x}"
 publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
+publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "contaminations.json"
 input:
 tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'), path('report_metaphlan_SGB.txt'), path('report_metaphlan_species.txt'), path('report_metaphlan_genera.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS)
 
 output:
 tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contaminations), emit: species
 path('predicted_genus_and_species.txt'), emit: to_pubdir 
-
+tuple val(x), path('contaminations.json'), emit: json
 script:
 """
 QC_status_contaminations="pass"
@@ -1982,56 +1984,58 @@ METAPHLAN_GENUS_LEVEL=`cat report_metaphlan_species.txt  | grep -v "#" | sort -r
 KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f11 | awk '{print int (\$1)}'`
 
 if [[ \${KRAKEN_GENUS_LEVEL} -lt 50 && \${METAPHLAN_GENUS_LEVEL} -lt 50 && \${KMERFINDER_COVERAGE} -lt 30 ]]; then
-# kraken2 i metaphlan zwracaja ponziej 50% odczytow nalezacych do glownego gatunku
-# kmerfinder zwraca pokrycie pierwszego gatunku ponad 30 
-QC_status_contaminations="fail"
-fi
-
-PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
-
-
-if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then
-    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
-elif [[ "\${PRE_FINALE_SPECIES}" == *"Escher"* || "\${PRE_FINALE_SPECIES}" == *"Shigella"* ]]; then
-    FINALE_SPECIES="Escherichia coli"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter coli" ]]; then
-    FINALE_SPECIES="jejuni"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter jejuni" ]]; then
-    FINALE_SPECIES="jejuni"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter concisus" ]]; then
-    FINALE_SPECIES="concisus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter curvus" ]]; then
-    FINALE_SPECIES="concisus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter fetus" ]]; then
-    FINALE_SPECIES="fetus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter helveticus" ]]; then
-    FINALE_SPECIES="helveticus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter hyointestinalis" ]]; then
-    FINALE_SPECIES="hyointestinalis"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter insulaenigrae" ]]; then
-    FINALE_SPECIES="insulaenigrae"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lanienae" ]]; then
-    FINALE_SPECIES="lanienae"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lari" ]]; then
-    FINALE_SPECIES="lari"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
-    FINALE_SPECIES="sputorum"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
-    FINALE_SPECIES="upsaliensis"
+  # kraken2 i metaphlan zwracaja ponziej 50% odczytow nalezacych do glownego gatunku
+  # kmerfinder zwraca pokrycie pierwszego gatunku ponad 30 
+  QC_status_contaminations="fail"
+  FINALE_SPECIES="unknown"
+  FINAL_GENUS="unknown"
+  echo -e "The sample is contaminated or lacks sufficient number of reads" >> predicted_genus_and_species.txt
 else
+  PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
+
+  if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then
     FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
+  elif [[ "\${PRE_FINALE_SPECIES}" == *"Escher"* || "\${PRE_FINALE_SPECIES}" == *"Shigella"* ]]; then
+    FINALE_SPECIES="Escherichia coli"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter coli" ]]; then
+    FINALE_SPECIES="jejuni"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter jejuni" ]]; then
+    FINALE_SPECIES="jejuni"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter concisus" ]]; then
+    FINALE_SPECIES="concisus"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter curvus" ]]; then
+    FINALE_SPECIES="concisus"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter fetus" ]]; then
+    FINALE_SPECIES="fetus"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter helveticus" ]]; then
+    FINALE_SPECIES="helveticus"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter hyointestinalis" ]]; then
+    FINALE_SPECIES="hyointestinalis"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter insulaenigrae" ]]; then
+    FINALE_SPECIES="insulaenigrae"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lanienae" ]]; then
+    FINALE_SPECIES="lanienae"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lari" ]]; then
+    FINALE_SPECIES="lari"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
+    FINALE_SPECIES="sputorum"
+  elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
+    FINALE_SPECIES="upsaliensis"
+  else
+    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
+  fi
+
+  cat report_kraken2.txt | grep -w "G" | sort -rnk1 | head -1 | awk '{print \$6,\$7}'  >> intermediate_genus.txt
+  cat report_metaphlan_genera.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1" "}' | sed s'/g__//'g | sed s'/_/ /'g >> intermediate_genus.txt
+  echo -e "${KMERFINDER_GENUS} " >> intermediate_genus.txt
+
+  #Ecoli and Schigella are the same thing
+  FINAL_GENUS=`cat intermediate_genus.txt | sed s'/Shigella/Escherichia/'g | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3`
+  echo -e "Final genus:\t\${FINAL_GENUS}\nFinal species:\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
 fi
 
-
-cat report_kraken2.txt | grep -w "G" | sort -rnk1 | head -1 | awk '{print \$6,\$7}'  >> intermediate_genus.txt
-cat report_metaphlan_genera.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print \$1" "}' | sed s'/g__//'g | sed s'/_/ /'g >> intermediate_genus.txt
-echo -e "${KMERFINDER_GENUS} " >> intermediate_genus.txt
-
-#Ecoli and Schigella are the same thing
-FINAL_GENUS=`cat intermediate_genus.txt | sed s'/Shigella/Escherichia/'g | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3`
-
-echo -e "Final genus:\t\${FINAL_GENUS}\nFinal species:\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
-
+# json output
+python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json
 """
 }
 
@@ -2305,6 +2309,7 @@ process run_kmerfinder_nanopore {
 
 process get_species_nanopore {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
+container  = 'salmonella_illumina:2.0'
 tag "Predicting species for ${x}"
 publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
 input:
