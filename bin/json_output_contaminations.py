@@ -12,9 +12,9 @@ output_name = sys.argv[2] # nazwa pliku z jsonem
 try:
     f=open("report_kraken2.txt").readlines()
     if len(f) == 0:
-        kraken2_json = [{"program_nazwa": "kraken2", \
-                "status": "Blad", \
-                "komunikat_bledu": "kraken2 output is empty"}]
+        kraken2_json = [{"program_name": "kraken2", \
+                "status": "nie", \
+                "error_message": "kraken2 output is empty"}]
     else:
         genus_dict = {}
         species_dict = {}
@@ -26,30 +26,30 @@ try:
                 genus_dict[line[5]] = float(line[0])
         genus_names_sorted = sorted(genus_dict, key = lambda x: genus_dict[x], reverse = True)
         species_names_sorted = sorted(species_dict, key = lambda x: species_dict[x], reverse = True)    
-        kraken2_json =  [{"program_nazwa": "kraken2", \
+        kraken2_json =  [{"program_name": "kraken2", \
                 "status": "Tak", \
-                "zanieszczyszenie_glowny_rodzaj_nazwa": genus_names_sorted[0], \
-                "zanieszczyszenie_dodatkowy_rodzaj_nazwa": genus_names_sorted[1], \
-              "zanieszczyszenie_glowny_gatunek_nazwa" : species_names_sorted[0], \
-              "zanieszczyszenie_dodatkowy_gatunek_nazwa": species_names_sorted[1], \
-              "zanieszczyszenie_glowny_rodzaj_wartosc": f'{genus_dict[genus_names_sorted[0]]:.2f}', \
-              "zanieszczyszenie_dodatkowy_rodzaj_wartosc" : f'{genus_dict[genus_names_sorted[1]]:.2f}', \
-              "zanieszczyszenie_glowny_gatunek_wartosc" : f'{species_dict[species_names_sorted[0]]:.2f}', \
-              "zanieszczyszenie_dodatkowy_gatunek_wartosc":  f'{species_dict[species_names_sorted[1]]:.2f}'}]
+                "main_genus_name": genus_names_sorted[0], \
+                "secondary_genus_name": genus_names_sorted[1], \
+              "main_species_name" : species_names_sorted[0], \
+              "secondary_species_name": species_names_sorted[1], \
+              "main_genus_value": f'{genus_dict[genus_names_sorted[0]]:.2f}', \
+              "secondary_genus_value" : f'{genus_dict[genus_names_sorted[1]]:.2f}', \
+              "main_species_value" : f'{species_dict[species_names_sorted[0]]:.2f}', \
+              "secondary_species_value":  f'{species_dict[species_names_sorted[1]]:.2f}'}]
 except FileNotFoundError:
     # Nie ma pliku zwracany ustalonego jsonai
-    kraken2_json = [{"program_nazwa": "kraken2", \
-         "status": "Blad", \
-         "komunikat_bledu": "No kraken2 output"}]
+    kraken2_json = [{"program_name": "kraken2", \
+         "status": "blad", \
+         "error_message": "No kraken2 output"}]
 
 ### metaphlan
 try:
     f1=open("report_metaphlan_genera.txt").readlines()
     f2=open("report_metaphlan_species.txt").readlines()
     if len(f1) == 0 or len(f2) == 0:
-        metaphlan_json = [{"program_nazwa": "metaphlan", \
-                "status": "Blad", \
-                "komunikat_bledu": "Metaphlan output is empty"}]
+        metaphlan_json = [{"program_name": "metaphlan", \
+                "status": "nie", \
+                "error_message": "Metaphlan output is empty"}]
     else:
         genus_dict = {}
         species_dict = {}
@@ -71,29 +71,29 @@ try:
             species_names_sorted.append('None')
             species_dict['None'] = 0
 
-        metaphlan_json =  [{"program_nazwa": "metaphlan", \
+        metaphlan_json =  [{"program_name": "metaphlan", \
                 "status": "Tak", \
-              "zanieszczyszenie_glowny_rodzaj_nazwa": genus_names_sorted[0], \
-              "zanieszczyszenie_dodatkowy_rodzaj_nazwa": genus_names_sorted[1], \
-              "zanieszczyszenie_glowny_gatunek_nazwa" : species_names_sorted[0], \
-              "zanieszczyszenie_dodatkowy_gatunek_nazwa": species_names_sorted[1], \
-              "zanieszczyszenie_glowny_rodzaj_wartosc": f'{genus_dict[genus_names_sorted[0]]:.2f}', \
-              "zanieszczyszenie_dodatkowy_rodzaj_wartosc" : f'{genus_dict[genus_names_sorted[1]]:.2f}', \
-              "zanieszczyszenie_glowny_gatunek_wartosc" : f'{species_dict[species_names_sorted[0]]:.2f}', \
-              "zanieszczyszenie_dodatkowy_gatunek_wartosc":  f'{species_dict[species_names_sorted[1]]:.2f}'}]
+              "main_genus_name": genus_names_sorted[0], \
+              "secondary_genus_name": genus_names_sorted[1], \
+              "main_species_name" : species_names_sorted[0], \
+              "secondary_species_name": species_names_sorted[1], \
+              "main_genus_value": f'{genus_dict[genus_names_sorted[0]]:.2f}', \
+              "secondary_genus_value" : f'{genus_dict[genus_names_sorted[1]]:.2f}', \
+              "main_species_value" : f'{species_dict[species_names_sorted[0]]:.2f}', \
+              "secondary_species_value":  f'{species_dict[species_names_sorted[1]]:.2f}'}]
 except FileNotFoundError:
     # Nie ma pliku zwracany ustalonego jsonai
-    metaphlan_json = [{"program_nazwa": "metaphlan", \
-         "status": "Blad", \
-         "komunikat_bledu": "No metaphlan output"}]
+    metaphlan_json = [{"program_name": "metaphlan", \
+         "status": "blad", \
+         "error_message": "No metaphlan output"}]
 
 ### Kmerfinder
 try:
     f=open("results.txt").readlines()
     if len(f) == 0:
-        kmerfinder_json = [{"program_nazwa": "kmerfinder", \
-                "status": "Blad", \
-                "komunikat_bledu": "kmerfinder output is empty"}]
+        kmerfinder_json = [{"program_name": "kmerfinder", \
+                "status": "nie", \
+                "error_message": "kmerfinder output is empty"}]
     else:
         genus_dict = {}
         species_dict = {}
@@ -124,17 +124,17 @@ try:
             species_names_sorted.append('None')
             species_dict['None'] = 0
 
-        kmerfinder_json =  [{"program_nazwa": "kmerfinder", \
+        kmerfinder_json =  [{"program_name": "kmerfinder", \
                 "status": "Tak", \
-              "zanieszczyszenie_glowny_gatunek_nazwa" : species_names_sorted[0], \
-              "zanieszczyszenie_dodatkowy_gatunek_nazwa": species_names_sorted[1], \
-              "zanieszczyszenie_glowny_gatunek_pokrycie" : f'{species_dict[species_names_sorted[0]]:.2f}', \
-              "zanieszczyszenie_dodatkowy_gatunek_pokrycie":  f'{species_dict[species_names_sorted[1]]:.2f}' }]
+              "main_species_name" : species_names_sorted[0], \
+              "secondary_species_name": species_names_sorted[1], \
+              "main_species_coverage" : f'{species_dict[species_names_sorted[0]]:.2f}', \
+              "secondary_species_coverage":  f'{species_dict[species_names_sorted[1]]:.2f}' }]
 except FileNotFoundError:
     # Nie ma pliku zwracany ustalonego jsonai
-    kmerfinder_json = [{"program_nazwa": "kmerfinder", \
-         "status": "Blad", \
-         "komunikat_bledu": "No kmerfinder output"}]
+    kmerfinder_json = [{"program_name": "kmerfinder", \
+         "status": "blad", \
+         "error_message": "No kmerfinder output"}]
 
 if pipeline_type == 'bacterial_illumina':
     full_output = kmerfinder_json + metaphlan_json + kraken2_json
