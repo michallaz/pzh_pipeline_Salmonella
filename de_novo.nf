@@ -54,22 +54,20 @@ process run_fastqc_illumina {
   input:
   tuple val(x), path(reads)
   output:
-  tuple path("*forward_fastqc.txt"), path("*reverse_fastqc.txt"), path("*fastqc.html")
-
+  path("*csv"), emit: publishdir
+  path("*json"), emit: json
+  env(QC_STATUS), emit: status
   script:
   """
-  QUALITY=${params.quality}
-  fastqc --format fastq \
-         --threads ${params.cpus} \
-         --memory 2024 \
-         --extract \
-         --delete \
-         --outdir . \
-         ${reads[0]} ${reads[1]}
-    r1=\$(basename ${reads[0]} .fastq.gz)
-    r2=\$(basename ${reads[1]} .fastq.gz)
-    /data/parse_fastqc_output.py \${r1}_fastqc/fastqc_data.txt \${QUALITY} >> ${x}_forward_fastqc.txt
-    /data/parse_fastqc_output.py \${r2}_fastqc/fastqc_data.txt \${QUALITY} >> ${x}_reverse_fastqc.txt
+  QC_STATUS=""
+  # Pipeline bakteryjny ma tylko liczenie QC na etapie 
+  STATUS_FORWARD=`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m 4048 -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`
+  STATUS_REVERSE=`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m 4048 -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`
+  if [[ \${STATUS_FORWARD} == "blad"  || \${STATUS_FORWARD} == "nie" || \${STATUS_REVERSE} == "blad"  || \${STATUS_REVERSE} == "nie" ]]; then
+    QC_STATUS="nie" # moduly "nizej" dostaja niei, bo blad jest na tym etapie
+  else
+    QC_STATUS="tak"
+  fi 
   """
 }
 

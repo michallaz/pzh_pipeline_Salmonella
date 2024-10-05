@@ -7,49 +7,76 @@ import sys
 import numpy as np
 import click
 import json
-
-
+import subprocess
+import re
+def run_fastqc(plik, memory, cpu):
+    polecenie = (f'fastqc --format fastq --threads ${cpu} --memory {memory} --extract --outdir . {plik}')
+    proces = subprocess.Popen(polecenie, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proces.wait()
+    outs, errs = proces.communicate()
+    status_fastqc = re.findall('Analysis complete', str(outs))
+    if len(status_fastqc) > 0:
+        status = 'tak'
+    else:
+        status = 'blad'
+    return status
 @click.command()
-@click.option('-i', '--input_file', help='[INPUT] a path to a summary file produced with fastqc ',
+@click.option('-i', '--input_file', help='[INPUT] a path to a file in fastq format ',
               type=click.Path(), default="fastqc_data.txt")
-@click.option('-f', '--filename', help='[INPUT] name of a file used for fastqc analysis, required if '
-                                       'status is different than tak',
-              type=str, default="")
-@click.option('-s', '--status', help='[INPUT] Status that is transferred to an output json ',
+@click.option('-m', '--memory', help='[INPUT] Memory available to fastqc program',
+              type=int, default=4048)
+@click.option('-c', '--cpu', help='[INPUT] CPUs available to fastqc program',
+              type=int, default=4)
+@click.option('-s', '--status', help='[INPUT] PREDEFINED status that is transferred to an output json. '
+                                     'If this status was either nie or blad fastqc will not run',
               type=click.Choice(['tak', 'nie', 'blad'], case_sensitive=False),  required=True)
 @click.option('-e', '--stage', help='[INPUT] Stage on which data is analyzed',
               type=click.Choice(["pre-filtering", "post-filtering"], case_sensitive=False),  required=True)
 @click.option('-p', '--publishdir', help='[INPUT] Path with fNEXTFLOW output, required to correctly format json',
               type=str,  required=True)
-@click.option('-m', '--error', help='[INPUT] Error that is put in json',
+@click.option('-m', '--error', help='[INPUT] PREDEFINED error message that is put in json. '
+                                    'Only used when status was set to nie or blad',
               type=str,  required=False, default="")
 @click.option('-o', '--output', help='[Output] Name of a file with json output',
               type=str,  required=False)
-def main_program(input_file, status, stage, publishdir, output, error, filename):
+def main_program(input_file, memory, cpu, status, stage, publishdir, output, error):
+    # Na poczatku obsluzmy sytuacje gdzie predefiniowany status to blad lub nie
     if status == "nie" or status == 'blad':
-        json_dict = [{"status": status, "file_name": filename, "step_name": stage, "error_message": error}]
+        json_dict = [{"status": status, "file_name": input_file, "step_name": stage, "error_message": error}]
         with open(output, 'w') as f1:
             f1.write(json.dumps(json_dict))
-        return True
+        return status
     else:
+        # upewnijmy sie ze podany plik wogole istnieje
         try:
             open(input_file)
         except FileNotFoundError:
-            json_dict = [{"status": "error", "file_name": filename, "step_name": stage,
+            status = 'blad'
+            json_dict = [{"status": {status}, "file_name": input_file, "step_name": stage,
                          "error_message": "Provided file does not exists"}]
             with open(output, 'w') as f1:
                 f1.write(json.dumps(json_dict))
-            return True
-
+            return status
+        # to wywoluje polecenie fastqc na pliku, przy okazji obsluzymy wyjatek ze podany plik nie jest
+        # fastq wedlug fastqc
+        status = run_fastqc(input_file, memory, cpu)
+        if status == 'blad':
+            json_dict = [{"status": "blad", "file_name": input_file, "step_name": stage,
+                          "error_message": "Provided file is not in fastq format"}]
+            with open(output, 'w') as f1:
+                f1.write(json.dumps(json_dict))
+            return status
+        # mamy plik z wynikami i fastqc go przeprocesowal
+        input_dir = input_file.replace('.fastq.gz', '_fastqc')
         number_of_reads_value = 0  # pole number_of_reads_value
         number_of_bases_value = 0  # pole number_of_bases_value
         reads_median_length_value = 0  # pole reads_median_length_value
         reads_min_length_value = 0  # reads_min_length_value
         reads_max_length_value = 0  # pole reads_max_length_value
         reads_median_quality_value = 0  # pole reads_median_quality_value
-        reads_quality_histogram_path = f'{stage}_reads_quality_histogram.csv'  # pole reads_quality_histogram_path
-        reads_length_histogram_path = f'{stage}_reads_length_histogram.csv'  # pole reads_length_histogram_path
-        position_quality_plot_path = f'{stage}_position_quality_plot.csv'
+        reads_quality_histogram_path = f'{input_dir}_reads_quality_histogram.csv'  # pole reads_quality_histogram_path
+        reads_length_histogram_path = f'{input_dir}_reads_length_histogram.csv'  # pole reads_length_histogram_path
+        position_quality_plot_path = f'{input_dir}_position_quality_plot.csv'
         gc_content_value = 0  # OPCJONALNE pole gc_content_value
 
         reads_median_quality_data = []  # pomocnicza lista do obliczenia mediany
@@ -66,7 +93,7 @@ def main_program(input_file, status, stage, publishdir, output, error, filename)
 
         position_quality_file = open(position_quality_plot_path, "w")
         position_quality_file.write(f'#indeks;pozycja_w_odczycie;mediana_jakosc\n')
-        with open(input_file) as f:
+        with open(f'{input_dir}/fastqc_data.txt') as f:
             for line in f:
                 line = line.split('\t')
                 if ">>" in line[0] and start == 0:
@@ -131,7 +158,7 @@ def main_program(input_file, status, stage, publishdir, output, error, filename)
                                              "error_message": "Error when parsin fastqc file"}]
                                 with open(output, 'w') as f1:
                                     f1.write(json.dumps(json_dict))
-                                return True
+                                return status
 
                             position_quality_file.write(f"{indeks};{pozycja};{line[2]}\n")
     json_dict = [{"status": "tak",
@@ -150,7 +177,7 @@ def main_program(input_file, status, stage, publishdir, output, error, filename)
                  "gc_content_value": round(float(gc_content_value), 2)}]
     with open(output, 'w') as f1:
         f1.write(json.dumps(json_dict))
-    return True
+    return status
 
 
 if __name__ == '__main__':
