@@ -5,6 +5,7 @@ import sys
 
 pipeline_type = sys.argv[1] # decyduje ktore programy beda wyswietlane np. bacteria_illumina ma wyniki kraken2, metaphlan i kmerfinder, bacterial_nanopore nie ma metaphlan, dla viral jest tylko kraken2
 output_name = sys.argv[2] # nazwa pliku z jsonem
+initial_status = sys.argv[3]
 
 # json dla kontaminacji ma postac listy
 
@@ -12,9 +13,14 @@ output_name = sys.argv[2] # nazwa pliku z jsonem
 try:
     f=open("report_kraken2.txt").readlines()
     if len(f) == 0:
-        kraken2_json = [{"program_name": "kraken2", \
-                "status": "nie", \
-                "error_message": "kraken2 output is empty"}]
+        if initial_status == "nie":
+            kraken2_json = [{"program_name": "kraken2", \
+                    "status": "nie", \
+                    "error_message": "Kraken2 module was entered with failed QC status"}]
+        elif initial_status == "blad":
+            kraken2_json = [{"program_name": "kraken2", \
+                    "status": "blad", \
+                    "error_message": "Sample failed QC analysis with kraken2"}]
     else:
         genus_dict = {}
         species_dict = {}
@@ -47,9 +53,15 @@ try:
     f1=open("report_metaphlan_genera.txt").readlines()
     f2=open("report_metaphlan_species.txt").readlines()
     if len(f1) == 0 or len(f2) == 0:
-        metaphlan_json = [{"program_name": "metaphlan", \
-                "status": "nie", \
-                "error_message": "Metaphlan output is empty"}]
+        if initial_status == "nie":
+            metaphlan_json = [{"program_name": "metaphlan", \
+                    "status": "nie", \
+                    "error_message": "Metaphlan module was entered with failed QC status"}]
+        elif initial_status == "blad":
+            metaphlan_json = [{"program_name": "metaphlan", \
+                    "status": "blad", \
+                    "error_message": "Sample failed QC analysis with metaphlan"}]
+
     else:
         genus_dict = {}
         species_dict = {}
@@ -91,9 +103,14 @@ except FileNotFoundError:
 try:
     f=open("results.txt").readlines()
     if len(f) == 0:
-        kmerfinder_json = [{"program_name": "kmerfinder", \
-                "status": "nie", \
-                "error_message": "kmerfinder output is empty"}]
+        if initial_status == "nie":
+            kmerfinder_json = [{"program_name": "kmerfinder", \
+                    "status": "nie", \
+                    "error_message": "kmerfinder module was entered with failed QC status"}]
+        elif initial_status == "blad":
+            kmerfinder_json = [{"program_name": "kmerfinder", \
+                     "status": "blad", \
+                     "error_message": "Sample failed QC analysis with kmerfinder"}]
     else:
         genus_dict = {}
         species_dict = {}
