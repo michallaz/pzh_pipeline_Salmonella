@@ -90,6 +90,7 @@ process run_fastqc_illumina {
   tag "fastqc for sample ${x}"
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
   maxForks 5
   input:
   tuple val(x), path(reads), val(QC_STATUS)
@@ -103,36 +104,26 @@ process run_fastqc_illumina {
   """
   # Set up QC_STATUS to "tak" if a given module does not provide this value via input
   # run_fastqc_and_generate_json.py will always produce output required by these module, even if no valid fastq file is provided, or fastq file
-  # does not meet predeifned criteria
- 
-  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m ${params.memory} -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
-  STATUS_FORWARD="\${DANE_FORWARD[0]}"
-  ILOSC_ODCZYTOW_FORWARD="\${DANE_FORWARD[1]}"
-  MEDIANA_JAKOSCI_FORWARD="\${DANE_FORWARD[2]}"
-  BASES_FORWARD="\${DANE_FORWARD[3]}"
+  # does not meet predeifned criteria. The script returns to values status (tak, nie, blad) and total numberof bases in fastqfile (0 if status is not tak)
 
-  if [[ \${STATUS_FORWARD} != "tak" || \${ILOSC_ODCZYTOW_FORWARD} -lt ${params.min_number_of_reads} || \${MEDIANA_JAKOSCI_FORWARD} -lt ${params.min_median_quality} ]]; then
-    STATUS_FORWARD_ALL="nie"
+  if [ ${QC_STATUS} == "nie" ]; then
+    ERROR_MSG="Initial QC received by this module was nie"
   else
-    STATUS_FORWARD_ALL="tak"
+    ERROR_MSG=""
   fi
- 
-  DANE_REVERSE=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m ${params.memory} -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`)
-  STATUS_REVERSE="\${DANE_REVERSE[0]}"
-  ILOSC_ODCZYTOW_REVERSE="\${DANE_REVERSE[1]}"
-  MEDIANA_JAKOSCI_REVERSE="\${DANE_REVERSE[2]}"
-  BASES_REVERSE="\${DANE_REVERSE[3]}"
+   
+  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m ${params.memory} -c ${params.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
+  STATUS_FORWARD_ALL="\${DANE_FORWARD[0]}"
+  BASES_FORWARD="\${DANE_FORWARD[1]}"
+
+  DANE_REVERSE=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m ${params.memory} -c ${params.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`)
+  STATUS_REVERSE_ALL="\${DANE_REVERSE[0]}"
+  BASES_REVERSE="\${DANE_REVERSE[1]}"
  
   TOTAL_BASES=`echo "\${BASES_FORWARD} + \${BASES_REVERSE}" | bc -l`
 
-  if [[ \${STATUS_REVERSE} != "tak" || \${ILOSC_ODCZYTOW_REVERSE} -lt ${params.min_number_of_reads} || \${MEDIANA_JAKOSCI_REVERSE} -lt ${params.min_median_quality} ]]; then
-    STATUS_REVERSE_ALL="nie"
-  else
-    STATUS_REVERSE_ALL="tak"
-  fi
-
-  if [[ \${STATUS_FORWARD_ALL} == "nie"  || \${STATUS_REVERSE_ALL} == "nie" ]]; then
-    QC_STATUS_EXIT="nie" # moduly "nizej" dostaja niei, bo blad jest na tym etapie
+  if [[ \${STATUS_FORWARD_ALL} == "nie"  || \${STATUS_REVERSE_ALL} == "nie"  || \${STATUS_FORWARD_ALL} == "blad"  || \${STATUS_REVERSE_ALL} == "blad" ]]; then
+    QC_STATUS_EXIT="nie" # moduly "nizej" dostaja status nie
   else
     QC_STATUS_EXIT="tak"
   fi 
@@ -145,6 +136,7 @@ process run_fastqc_nanopore {
   tag "fastqc for sample ${x}"
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
   maxForks 5
   input:
   tuple val(x), path(reads), val(QC_STATUS)
@@ -157,14 +149,17 @@ process run_fastqc_nanopore {
   script:
   if (QC_STATUS == null) { QC_STATUS="tak" } //
   """
-  
-  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads} -m ${params.memory} -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
+  if [ ${QC_STATUS} == "nie" ]; then
+    ERROR_MSG="Initial QC received by this module was nie"
+  else
+    ERROR_MSG=""
+  fi
+ 
+  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads} -m ${params.memory} -c ${params.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
   STATUS_FORWARD="\${DANE_FORWARD[0]}"
-  ILOSC_ODCZYTOW_FORWARD="\${DANE_FORWARD[1]}"
-  MEDIANA_JAKOSCI_FORWARD="\${DANE_FORWARD[2]}"
-  TOTAL_BASES="\${DANE_FORWARD[3]}"
+  TOTAL_BASES="\${DANE_FORWARD[1]}"
 
-  if [[ \${STATUS_FORWARD} != "tak" || \${ILOSC_ODCZYTOW_FORWARD} -lt ${params.min_number_of_reads} || \${MEDIANA_JAKOSCI_FORWARD} -lt ${params.min_median_quality} ]]; then
+  if [ \${STATUS_FORWARD} != "tak" ]; then
     QC_STATUS_EXIT="nie"
   else
     QC_STATUS_EXIT="tak"
@@ -243,6 +238,9 @@ process run_initial_mlst_illumina {
     elif [ ${GENUS} == "Campylobacter" ]; then
     # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd .. 
     python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
+    else
+      # We encountered wrong genus
+      QC_status_exit="nie"
     fi
 
     # Parsowanie wyniku
@@ -2054,7 +2052,7 @@ if [ ${QC_STATUS} == "nie" ]; then
   FINAL_GENUS="unknown"
   echo "This module was eneterd with failed QC and poduced no valid output" >> predicted_genus_and_species.txt
   # contaminations json
-  python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json nie
+  python /opt/docker/EToKi/externals/json_output_contaminations.py -k report_kraken2.txt -g report_metaphlan_genera.txt -x report_metaphlan_species.txt -y results.txt -s nie -m "Species prediction module recieved incorrect data" -o contaminations.json
 else 
   QC_status_contaminations="tak"
   PRE_FINALE_SPECIES=""
@@ -2066,14 +2064,16 @@ else
   METAPHLAN_GENUS_LEVEL=`cat report_metaphlan_species.txt  | grep -v "#" | sort -rnk3 | head -1 | awk '{print int(\$3)}'`
   KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f9 | awk '{print int (\$1)}'`
 
-  if [[ \${KRAKEN_GENUS_LEVEL} -lt 50 && \${METAPHLAN_GENUS_LEVEL} -lt 50 && \${KMERFINDER_COVERAGE} -lt 30 ]]; then
+  if [[ \${KRAKEN_GENUS_LEVEL} -lt ${params.main_genus_value} && \${METAPHLAN_GENUS_LEVEL} -lt ${params.main_genus_value} && \${KMERFINDER_COVERAGE} -lt ${params.kmerfinder_coverage} ]]; then
     # kraken2 i metaphlan zwracaja ponziej 50% odczytow nalezacych do glownego gatunku
-    # kmerfinder zwraca pokrycie pierwszego gatunku ponad 30 
+    # i kmerfinder zwraca pokrycie pierwszego gatunku ponad 20
+    # jestemy tu bardzo liberalni 
     QC_status_contaminations="nie"
     FINALE_SPECIES="unknown"
     FINAL_GENUS="unknown"
     echo -e "The sample is contaminated or lacks sufficient number of reads" >> predicted_genus_and_species.txt
-    python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json blad
+    ERROR_MSG=`echo This sample fails basic QC for this module reads associated with dominant genus is \${KRAKEN_GENUS_LEVEL} according to kraken2, and \${METAPHLAN_GENUS_LEVEL} according to metaphlan. Predicted coverage for main species is \${KMERFINDER_COVERAGE}`
+    python /opt/docker/EToKi/externals/json_output_contaminations.py -k report_kraken2.txt -g report_metaphlan_genera.txt -x report_metaphlan_species.txt -y results.txt -s blad -m "\${ERROR_MSG}" -o contaminations.json
   else
     PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
 
@@ -2134,13 +2134,14 @@ else
 
     # ostani przelacnik liczba zasad to co najmniej 30x dlugosc "oczekiwanego" genomu
     TEORETICAL_COVERAGE=`awk -v g_size="\${GENOME_SIZE}" -v t_bases="${TOTAL_BASES}" 'BEGIN {print t_bases/g_size}'`
-    if [ `awk -v tot_cov=\${TEORETICAL_COVERAGE} 'BEGIN {if(tot_cov > 20) {print 1} else {print 0}}'` -eq 1 ]; then
+    if [ `awk -v tot_cov=\${TEORETICAL_COVERAGE} -v exp_cov=${params.main_species_coverage} 'BEGIN {if(tot_cov > exp_cov) {print 1} else {print 0}}'` -eq 1 ]; then
       # Tu jestesmy lagodniejsi, ostateczna wartosc sredniego pokrycia uzyjemy dopiero przy skladaniu genomu
       # aLe przy liczbie zasad mniejszej niz 20 x teoretycznego pokrycia nawet nie ma co probowac
-      python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json tak
       QC_status_contaminations="tak"
+      python /opt/docker/EToKi/externals/json_output_contaminations.py -k report_kraken2.txt -g report_metaphlan_genera.txt -x report_metaphlan_species.txt -y results.txt -s tak -o contaminations.json
     else
-      python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json blad
+      ERROR_MSG=`echo This sample fails basic QC for this module. Predicted theoretical coverage is below ${params.main_species_coverage}`
+      python /opt/docker/EToKi/externals/json_output_contaminations.py -k report_kraken2.txt -g report_metaphlan_genera.txt -x report_metaphlan_species.txt -y results.txt -s blad -m "\${ERROR_MSG}" -o contaminations.json
       QC_status_contaminations="nie"
     fi
   fi
@@ -2172,6 +2173,10 @@ process run_initial_mlst_nanopore {
     elif [ ${GENUS} == "Campylobacter" ]; then
     # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd ..
     python /opt/docker/mlst/mlst.py -i ${reads} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
+    else
+      # We encountered wrong genus
+      # Pipeline stops at this step
+      QC_status_exit="nie"
     fi
 
     # Parsowanie wyniku
@@ -2474,8 +2479,7 @@ if [ ${QC_STATUS} == "nie" ]; then
   FINALE_SPECIES="unknown"
   FINAL_GENUS="unknown"
   echo "This module was eneterd with failed QC and poduced no valid output" >> predicted_genus_and_species.txt
-  # contaminations json
-  python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json nie
+  python /opt/docker/EToKi/externals/json_output_contaminations.py -k report_kraken2.txt -g skip -x skip -y results.txt -s nie -m "Species prediction module recieved incorrect data" -o contaminations.json
 else
   QC_status_contaminations="tak"
   PRE_FINALE_SPECIES=""
@@ -2485,14 +2489,16 @@ else
   KRAKEN_GENUS_LEVEL=`cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print int(\$1)}'`
   KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f9 | awk '{print int (\$1)}'`
 
-  if [[ \${KRAKEN_GENUS_LEVEL} -lt 50 && \${KMERFINDER_COVERAGE} -lt 30 ]]; then
+  if [[ \${KRAKEN_GENUS_LEVEL} -lt $params.main_genus_value} && \${KMERFINDER_COVERAGE} -lt ${params.kmerfinder_coverage} ]]; then
     # kraken2 zwraca mniej nizd 50% odczytow nalezacych do glownego gatunku
-    # kmerfinder zwraca pokrycie pierwszego gatunku ponizej 30
+    # kmerfinder zwraca pokrycie pierwszego gatunku ponizej 20
     QC_status_contaminations="nie"
     FINALE_SPECIES="unknown"
     FINAL_GENUS="unknown"
     echo -e "The sample is contaminated or lacks sufficient number of reads" >> predicted_genus_and_species.txt
-    python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json blad
+    ERROR_MSG=`echo This sample fails basic QC for this module reads associated with dominant genus is \${KRAKEN_GENUS_LEVEL} according to kraken2. Predicted coverage for main species is \${KMERFINDER_COVERAGE}`
+    python /opt/docker/EToKi/externals/json_output_contaminations.py -k report_kraken2.txt -g skip -x skip -y results.txt -s blad -m "\${ERROR_MSG}" -o contaminations.json
+
   else
     PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
 
@@ -2551,12 +2557,13 @@ else
     echo -e "Final genus:\t\${FINAL_GENUS}\nFinal species:\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
 
     TEORETICAL_COVERAGE=`awk -v g_size="\${GENOME_SIZE}" -v t_bases="${TOTAL_BASES}" 'BEGIN {print t_bases/g_size}'`
-    if [ `awk -v tot_cov=\${TEORETICAL_COVERAGE} 'BEGIN {if(tot_cov > 20) {print 1} else {print 0}}'` -eq 1 ]; then
-      python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json tak
+    if [ `awk -v tot_cov=\${TEORETICAL_COVERAGE} -v exp_cov=${params.main_species_coverage} 'BEGIN {if(tot_cov > exp_cov) {print 1} else {print 0}}'` -eq 1 ]; then
       QC_status_contaminations="tak"
+      python /opt/docker/EToKi/externals/json_output_contaminations.py -k report_kraken2.txt -g skip -x skip -y results.txt -s tak -o contaminations.json
     else
-      python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json blad
       QC_status_contaminations="nie"
+      ERROR_MSG=`echo This sample fails basic QC for this module. Predicted theoretical coverage is below ${params.main_species_coverage}`
+      python /opt/docker/EToKi/externals/json_output_contaminations.py -k report_kraken2.txt -g skip -x skip -y results.txt -s blad -m "\${ERROR_MSG}" -o contaminations.json
     fi
   fi
 fi

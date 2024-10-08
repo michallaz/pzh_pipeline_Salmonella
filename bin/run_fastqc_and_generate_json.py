@@ -9,6 +9,8 @@ import click
 import json
 import subprocess
 import re
+
+
 def run_fastqc(plik, memory, cpu):
     polecenie = (f'fastqc --format fastq --threads ${cpu} --memory {memory} --extract --outdir . {plik}')
     proces = subprocess.Popen(polecenie, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -29,6 +31,12 @@ def run_fastqc(plik, memory, cpu):
               type=int, default=4048)
 @click.option('-c', '--cpu', help='[INPUT] CPUs available to fastqc program',
               type=int, default=4)
+@click.option('-x', '--min_number', help='[INPUT] QC parameter if sample has less reads, '
+                                         'the json will contain blad ',
+              type=int)
+@click.option('-y', '--min_qual', help='[INPUT] QC parameter if reads have median quality less than'
+                                       ' this value the json will contain blad',
+              type=int)
 @click.option('-s', '--status', help='[INPUT] PREDEFINED status that is transferred to an output json. '
                                      'If this status was either nie or blad fastqc will not run',
               type=click.Choice(['tak', 'nie', 'blad'], case_sensitive=False),  required=True)
@@ -41,14 +49,16 @@ def run_fastqc(plik, memory, cpu):
               type=str,  required=False, default="")
 @click.option('-o', '--output', help='[Output] Name of a file with json output',
               type=str,  required=False)
-def main_program(input_file, memory, cpu, status, stage, publishdir, output, error):
+def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, publishdir, output, error):
     # Na poczatku obsluzmy sytuacje gdzie predefiniowany status to blad lub nie
     if status == "nie" or status == 'blad':
+        # check if predefined QC status is not "tak"
         json_dict = [{"status": status, "file_name": input_file, "step_name": stage, "error_message": error}]
         with open(output, 'w') as f1:
             f1.write(json.dumps(json_dict))
-        print(f"{status} 0 0 0")
-        return status, 0, 0, 0
+        # We always print the output, otherwise bash cannot "capture" the values reruned by this script
+        print(f"{status} 0 ")
+        return status, 0
     else:
         # upewnijmy sie ze podany plik wogole istnieje
         try:
@@ -59,8 +69,8 @@ def main_program(input_file, memory, cpu, status, stage, publishdir, output, err
                          "error_message": "Provided file does not exists"}]
             with open(output, 'w') as f1:
                 f1.write(json.dumps(json_dict))
-            print(f"{status} 0 0 0")
-            return status, 0, 0, 0
+            print(f"{status} 0")
+            return status, 0
         # to wywoluje polecenie fastqc na pliku, przy okazji obsluzymy wyjatek ze podany plik nie jest
         # fastq wedlug fastqc
         status = run_fastqc(input_file, memory, cpu)
@@ -69,8 +79,8 @@ def main_program(input_file, memory, cpu, status, stage, publishdir, output, err
                           "error_message": "Provided file is not in fastq format"}]
             with open(output, 'w') as f1:
                 f1.write(json.dumps(json_dict))
-            print(f"{status} 0 0 0")
-            return status, 0, 0, 0
+            print(f"{status} 0")
+            return status, 0
         # mamy plik z wynikami i fastqc go przeprocesowal
         input_dir = input_file.replace('.fastq.gz', '_fastqc')
         number_of_reads_value = 0  # pole number_of_reads_value
@@ -110,6 +120,14 @@ def main_program(input_file, memory, cpu, status, stage, publishdir, output, err
                     start = 0
                     if section_name == "Per sequence quality scores":
                         reads_median_quality_value = np.median(reads_median_quality_data)
+                        if round(float(reads_median_quality_value), 2) < float(min_qual):
+                            status = 'blad'
+                            json_dict = [{"status": "blad", "file_name": input_file, "step_name": stage,
+                                          "error_message": f"Reads quality is belowed minimum required level"}]
+                            with open(output, 'w') as f1:
+                                f1.write(json.dumps(json_dict))
+                            print(f"{status} 0")
+                            return status, 0
                     # koniec sekcji mozna zrzucac wyniki
                     if section_name == "Sequence Length Distribution":
                         reads_median_length_value = np.median(reads_median_length_data)
@@ -121,6 +139,15 @@ def main_program(input_file, memory, cpu, status, stage, publishdir, output, err
                             nazwa_pliku = line[1]
                         if line[0] == "Total Sequences":
                             number_of_reads_value = line[1]
+                            if float(number_of_reads_value) < float(min_number):
+                                status = 'blad'
+                                json_dict = [{"status": "blad", "file_name": input_file, "step_name": stage,
+                                              "error_message": f"The file has less than minimum required"
+                                                               f" number of reads"}]
+                                with open(output, 'w') as f1:
+                                    f1.write(json.dumps(json_dict))
+                                print(f"{status} 0")
+                                return status, 0
                         if line[0] == "Sequence length":
                             reads_min_length_value, reads_max_length_value = line[1].split("-")
                         if line[0] == "Total Bases":
@@ -159,32 +186,33 @@ def main_program(input_file, memory, cpu, status, stage, publishdir, output, err
                             elif len(line[0].split("-")) == 1:
                                 pozycja = line[0].split("-")[0]
                             else:
-                                json_dict = [{"status": "error", "file_name": input_file, "step_name": stage,
-                                             "error_message": "Error when parsin fastqc file"}]
+                                status = 'blad'
+                                json_dict = [{"status": "blad", "file_name": input_file, "step_name": stage,
+                                             "error_message": "Error when parsing fastqc file"}]
                                 with open(output, 'w') as f1:
                                     f1.write(json.dumps(json_dict))
-                                print(f"{status} 0 0 0")
-                                return status, 0, 0, 0
+                                print(f"{status} 0")
+                                return status, 0
 
                             position_quality_file.write(f"{indeks};{pozycja};{line[2]}\n")
     json_dict = [{"status": "tak",
-                 "file_name": nazwa_pliku.rstrip(),
-                 "step_name": stage,
-                 "error_message": "",
-                 "number_of_reads_value": int(number_of_reads_value),
-                 "number_of_bases_value": int(number_of_bases_value),
-                 "reads_median_length_value": round(float(reads_median_length_value),2),
-                 "reads_min_length_value": int(reads_min_length_value),
-                 "reads_max_length_value": int(reads_max_length_value),
-                 "reads_median_quality_value": round(float(reads_median_quality_value),2),
-                 "reads_quality_histogram_path": f"{publishdir}/{reads_quality_histogram_path}",
-                 "reads_length_histogram_path": f"{publishdir}/{reads_length_histogram_path}",
-                 "position_quality_plot_path": f"{publishdir}/{position_quality_plot_path}",
-                 "gc_content_value": round(float(gc_content_value), 2)}]
+                  "file_name": nazwa_pliku.rstrip(),
+                  "step_name": stage,
+                  "error_message": "",
+                  "number_of_reads_value": int(number_of_reads_value),
+                  "number_of_bases_value": int(number_of_bases_value),
+                  "reads_median_length_value": round(float(reads_median_length_value), 2),
+                  "reads_min_length_value": int(reads_min_length_value),
+                  "reads_max_length_value": int(reads_max_length_value),
+                  "reads_median_quality_value": round(float(reads_median_quality_value), 2),
+                  "reads_quality_histogram_path": f"{publishdir}/{reads_quality_histogram_path}",
+                  "reads_length_histogram_path": f"{publishdir}/{reads_length_histogram_path}",
+                  "position_quality_plot_path": f"{publishdir}/{position_quality_plot_path}",
+                  "gc_content_value": round(float(gc_content_value), 2)}]
     with open(output, 'w') as f1:
         f1.write(json.dumps(json_dict))
-    print(f"{status} {int(number_of_reads_value)} {round(float(reads_median_quality_value),2)} {number_of_bases_value}")
-    return status, number_of_reads_value,  round(float(reads_median_quality_value),2), int(number_of_bases_value)
+    print(f"{status}  {number_of_bases_value}")
+    return status, int(number_of_bases_value)
 
 
 if __name__ == '__main__':
@@ -193,5 +221,4 @@ if __name__ == '__main__':
     if len(sys.argv) == 1:
         main_program(['--help'])
     else:
-        return_status, number_of_reads, median_quality, number_of_bases = main_program(sys.argv[1:])
-
+        return_status, number_of_bases = main_program(sys.argv[1:])
