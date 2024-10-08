@@ -1,61 +1,94 @@
 // Input Parameters
+
 params.genus = '' // Can be set up by a User.
-                  // This parameter is used only to print a hint to a user that the pipeline will
+                  // This parameter is used only to print a hint that this pipeline will
                   // not produce any valid output for genuses other than Salmonella, Escherichia or Campylobacter
 
 params.reads =''  // Must be set up by User, path to reads i.e. '/mnt/sda1/michall/Salmonella/*_R{1,2}_001.fastq.gz'. Required
 params.machine = '' // Can be set to either 'Illumina' or 'Nanopore'. Required
+params.main_image = "salmonella_illumina:2.0" // image name with programs used by this pipeline
+params.prokka_image = "staphb/prokka:latest" // prokka image (publicly available)
 
+// // API TOKEN for ENTEROBASE API 2.0. USER-specific for now this is my PRIVATE token.
+params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwIjoxNzM2MjA0NDExfQ.eyJfIjoibUsyNFlZSHd4SyIsInVzZXJuYW1lIjoiTWljaGFsX0xhem5pZXdza2kiLCJpZCI6ODg4MCwiYWRtaW5pc3RyYXRvciI6bnVsbCwiZW1haWwiOiJtbGF6bmlld3NraUBwemguZ292LnBsIiwiYXBpX2FjY2Vzc19jbG9zdHJpZGl1bSI6IlRydWUiLCJhcGlfYWNjZXNzX2Vjb2xpIjoiVHJ1ZSIsImFwaV9hY2Nlc3Nfc2VudGVyaWNhIjoiVHJ1ZSJ9.VEsyVPv8sn1zG7d3uFqEjfk6XFS2qP8P5Y5mh9VPE9w"
 
-// Minimal quality of a base for kraken2, fastqc 
+// Number of cpus and memory assigned to a sample
+// these parameters are only used when a given program/module allows to specify CPU/RAM usage
+
+params.cpus = 25
+params.memory = 25
+
+// Minimum requirements for pipeline to produce valid output for ALL modules
+
 if ( params.machine  == 'Illumina' ) {
-  params.quality = 6
-  // Here we will put parameters to determine quliaty of a sample at fidderent stages
-  params.min_number_of_reads = 50000 // Like this, if  fastqfile has less than that many reads the QC_status is switched to nie 
-                                     // and downstream modules will not produce any valid output
-  params.min_median_quality = 10
+  params.quality = 6 // Parameter used by software for species prediction and by clean_fastq modules (for nano and illumina)
+  
+  // Here we will put parameters used to determine quliaty of a sample
+  // If a sample fails any of these QC parameters all downstream modules will not execute and produce dummy file
+  // 0. User provided a genuine fastq file, this is analyzed by checking if fastqc program produced a valid output 
+  
+  params.min_number_of_reads = 50000 // Initial value, in best-case-scenario that many reads for illumina would produce a full Campylobacter genome with avarage coverage of 9 
+  params.min_median_quality = 10 // Median of reads quality, quite liberal, normally we would expect > 30 for illumina
+  params.main_genus_value = 50 // At least 50% of reads are predicted to belong to the main genus identified in a sample
+  params.kmerfinder_coverage = 20 // For kmerfinder we usea  different value, expected coverage for main species
+  params.main_species_coverage = 20 // After identyfing a species we calculate theoretical coverage at a "genus" level. 
+  params.min_genome_length = 0.75 // The length of a proposed genome is at least 75% of genome length for a genus identified in a sample
+  params.min_number_of_allels = 5 // In 7-gene MLST schema we expect to see at least that many uniqe and valid loci using raw reads data
+  params.contig_number = 1000 // We expect to see less that that many contigs
+  params.L50 = 30000 // We expect that L50 will have at least that value
+  params.final_coverage = 20 // We expect that the average coverage calculated using assembled genome is that much
 } else if (params.machine  == 'Nanopore') {
+  // QC parameter for nanopore sample, some are identical with therir illumina counterparts
   params.quality = 2
   params.min_number_of_reads = 10000
-  params.min_median_quality = 5
+  params.min_median_quality = 5 
+  params.main_genus_value = 50 
+  params.kmerfinder_coverage = 20
+  params.main_species_coverage = 20
+  params.min_genome_length = 0.75
+  params.min_number_of_allels = 5
+  params.contig_number = 100
+  params.L50 = 300000
+  params.final_coverage = 20
+
+  // MODEL DO MEDAKI
+  params.model_medaka = "r941_min_hac_g507" // Flow cell v9.4.1  
 } else {
   println("Incorrect sequnecing platform, avalable options are : Illumina and Nanopore")
   System.exit(0)
 }
 
-params.cpus = 25 
-params.min_coverage_ratio = 0.1 // Minumum coverage of a contig with respect to average coverage for all contigs. Etoki uses 0.2
+// Filtering parameters 
 
-// Paths to PREDEFINED structure of /db directory
-// // Databases for ALL available species
+params.min_coverage_ratio = 0.1 // Minumum coverage ration of a contig with respect to average coverage in a given sample. Etoki uses 0.2.
+params.min_coverage_value = 20 // Second requirment for a contig to pass filter criteria. NOT IMPLEMENTED
+
+// Paths to ia PREDEFINED structure of /db directory
+// Databases for ALL available species
+
+params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
 params.AMRFINDER_db_absolute_path_on_host = "/mnt/sda1/michall/db/AMRfider_plus"
 params.metaphlan_db_absolute_path_on_host = "/mnt/sda1/michall/db/Metaphlan"
 params.kmerfinder_db_absolute_path_on_host = "/mnt/sda1/michall/db/Kmerfinder/kmerfinder_db"
 params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/"
 
-// Inform user that program is intended for only these 3 genra
+// Print information that this pipeline works only for for 3 pre-defined genra
+
 if ( params.genus  == 'Salmonella' || params.genus  == 'Escherichia' || params.genus == 'Campylobacter') {
-        params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
+    // params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
+    println("The program auto-detects genera, thus if Salmonella, Escherichia, and Campylobacter is not detected")
+    println("in provided sample(s), sub-programs will not execute, regardles of the genus that was provided by a user")
 } else {
-        params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
-	println("This program is intended to work with following genera: Salmonella, Escherichia, and Campylobacter")
-	println("It will continue but unless one of this genera is identified, sub-programs will not execute")
-	// System.exit(0)
+    // params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
+    println("This program is intended to work with following genera: Salmonella, Escherichia, and Campylobacter")
+    println("It will continue but unless one of this genera is identified, sub-programs will not execute")
+    // System.exit(0)
 }
-
-
-// API TOKEN for ENTEROBASE API 2.0
-params.enterobase_api_token = "eyJhbGciOiJIUzI1NiIsImlhdCI6MTcyMDQzNjQxMSwiZXhwIjoxNzM2MjA0NDExfQ.eyJfIjoibUsyNFlZSHd4SyIsInVzZXJuYW1lIjoiTWljaGFsX0xhem5pZXdza2kiLCJpZCI6ODg4MCwiYWRtaW5pc3RyYXRvciI6bnVsbCwiZW1haWwiOiJtbGF6bmlld3NraUBwemguZ292LnBsIiwiYXBpX2FjY2Vzc19jbG9zdHJpZGl1bSI6IlRydWUiLCJhcGlfYWNjZXNzX2Vjb2xpIjoiVHJ1ZSIsImFwaV9hY2Nlc3Nfc2VudGVyaWNhIjoiVHJ1ZSJ9.VEsyVPv8sn1zG7d3uFqEjfk6XFS2qP8P5Y5mh9VPE9w" 
-
-
-// Kontenery uzywane w tym skrypcie ustawione NA SZTYWNO !!! 
-// salmonella_illumina:2.0 - bazowy kontener z programami o kodem
-// staphb/prokka:latest - publiczny kontener z prokka, w notatkach mam ze budowanie programu od 0 jest meczace bo to kod sprzed ponad 4 lat 
 
 
 process run_fastqc_illumina {
   tag "fastqc for sample ${x}"
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
   maxForks 5
   input:
@@ -69,10 +102,10 @@ process run_fastqc_illumina {
   if (QC_STATUS == null) { QC_STATUS="tak" } // Domyslna wartosc w przypadku gdy user nie poda QC status
   """
   # Set up QC_STATUS to "tak" if a given module does not provide this value via input
-  
-
-  # Pipeline bakteryjny ma tylko liczenie QC na etapie 
-  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m 4048 -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
+  # run_fastqc_and_generate_json.py will always produce output required by these module, even if no valid fastq file is provided, or fastq file
+  # does not meet predeifned criteria
+ 
+  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m ${params.memory} -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
   STATUS_FORWARD="\${DANE_FORWARD[0]}"
   ILOSC_ODCZYTOW_FORWARD="\${DANE_FORWARD[1]}"
   MEDIANA_JAKOSCI_FORWARD="\${DANE_FORWARD[2]}"
@@ -84,7 +117,7 @@ process run_fastqc_illumina {
     STATUS_FORWARD_ALL="tak"
   fi
  
-  DANE_REVERSE=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m 4048 -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`)
+  DANE_REVERSE=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m ${params.memory} -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`)
   STATUS_REVERSE="\${DANE_REVERSE[0]}"
   ILOSC_ODCZYTOW_REVERSE="\${DANE_REVERSE[1]}"
   MEDIANA_JAKOSCI_REVERSE="\${DANE_REVERSE[2]}"
@@ -107,28 +140,36 @@ process run_fastqc_illumina {
 }
 
 process run_fastqc_nanopore {
-  // Lekko zmodyfkowany modul z sars-a
+  // Modification of run_fastqc_illumina 
+  // That requires one fastq.gz file
   tag "fastqc for sample ${x}"
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
   maxForks 5
   input:
-  tuple val(x), path(reads)
+  tuple val(x), path(reads), val(QC_STATUS)
   output:
-  tuple path("*_fastqc.txt"), path("*fastqc.html")
+  tuple val(x), path("*csv"), emit: publishdir
+  tuple val(x), path("*json"), emit: json
+  tuple val(x), env(QC_STATUS_EXIT), emit: qcstatus
+  tuple val(x), env(QC_STATUS_EXIT), env(TOTAL_BASES), emit: qcstatus_and_values
 
   script:
+  if (QC_STATUS == null) { QC_STATUS="tak" } //
   """
-  QUALITY=2
-  fastqc --format fastq \
-         --threads ${params.cpus} \
-         --memory 4048 \
-         --extract \
-         --delete \
-         --outdir . \
-         ${reads}
-    r1=\$(basename ${reads} .fastq.gz)
-    /data/parse_fastqc_output.py \${r1}_fastqc/fastqc_data.txt \${QUALITY} >> ${x}_fastqc.txt
+  
+  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads} -m ${params.memory} -c ${params.cpus} -s tak -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
+  STATUS_FORWARD="\${DANE_FORWARD[0]}"
+  ILOSC_ODCZYTOW_FORWARD="\${DANE_FORWARD[1]}"
+  MEDIANA_JAKOSCI_FORWARD="\${DANE_FORWARD[2]}"
+  TOTAL_BASES="\${DANE_FORWARD[3]}"
+
+  if [[ \${STATUS_FORWARD} != "tak" || \${ILOSC_ODCZYTOW_FORWARD} -lt ${params.min_number_of_reads} || \${MEDIANA_JAKOSCI_FORWARD} -lt ${params.min_median_quality} ]]; then
+    QC_STATUS_EXIT="nie"
+  else
+    QC_STATUS_EXIT="tak"
+  fi
+
   """
 }
 
@@ -211,37 +252,6 @@ process run_initial_mlst_illumina {
   fi
   """
 }
-
-
-
-process run_initial_mlst_nanopore {
-  // Proces dla nanopore
-  container  = 'salmonella_illumina:2.0'
-  tag "Initial MLST for sample $x"
-  maxForks 5
-  input:
-  tuple val(x), path(reads), val(SPECIES), val(GENUS)
-  output:
-  env(QC_status)
-  script:
-  """
-  mkdir tmp
-  if [[ "${GENUS}" == *"Salmo"* ]]; then
-  python /opt/docker/mlst/mlst.py -i ${reads} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
-  elif [[ "${GENUS}" == *"Escher"* ]]; then
-  python /opt/docker/mlst/mlst.py -i ${reads} -s ecoli -p /opt/docker/mlst_db/ -mp kma -t tmp/
-  elif [ ${GENUS} == "Campylobacter" ]; then
-  # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd ..
-  python /opt/docker/mlst/mlst.py -i ${reads} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
-  fi
-
-  # Parsowanie wyniku
-
-  # Warunki do QC
-  QC_status="pass"
-  """
-}
-
 
 process spades {
   // Funkcja do odpalania spadesa
@@ -2024,7 +2034,7 @@ process run_virulencefinder {
 
 process get_species_illumina {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
-container  = 'salmonella_illumina:2.0'
+container  = params.main_image
 tag "Predicting species for ${x}"
 publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
 publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "contaminations.json"
@@ -2129,19 +2139,48 @@ else
       # aLe przy liczbie zasad mniejszej niz 20 x teoretycznego pokrycia nawet nie ma co probowac
       python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json tak
       QC_status_contaminations="tak"
-      echo " OK w \${TEORETICAL_COVERAGE}" >> tmp.log
-   else
-     echo " Blad w \${TEORETICAL_COVERAGE}" >> tmp.log
-     python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json blad
-     QC_status_contaminations="nie"
-   fi
- fi
-
+    else
+      python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json blad
+      QC_status_contaminations="nie"
+    fi
+  fi
 fi
 """
 }
 
 // FUNKCJE DODANE DLA ANALIZY NANOPORE //
+
+process run_initial_mlst_nanopore {
+  // Kopia procesu dla illuminy ale obslugujacy jeden plik fastq.gz
+  container  = params.main_image
+  tag "Initial MLST for sample $x"
+  maxForks 5
+  input:
+  tuple val(x), path(reads), val(SPECIES), val(GENUS), val(QC_status)
+  output:
+  tuple val(x), path(reads), val(SPECIES), val(GENUS), env(QC_status_exit)
+  script:
+  """
+  mkdir tmp
+  if [ ${QC_status} == "nie" ]; then
+    QC_status_exit="nie"
+  else
+    if [[ "${GENUS}" == *"Salmo"* ]]; then
+    python /opt/docker/mlst/mlst.py -i ${reads} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
+    elif [[ "${GENUS}" == *"Escher"* ]]; then
+    python /opt/docker/mlst/mlst.py -i ${reads} -s ecoli -p /opt/docker/mlst_db/ -mp kma -t tmp/
+    elif [ ${GENUS} == "Campylobacter" ]; then
+    # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd ..
+    python /opt/docker/mlst/mlst.py -i ${reads} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
+    fi
+
+    # Parsowanie wyniku
+
+    # Warunki do QC
+    QC_status_exit="tak"
+  fi
+  """
+}
 
 process run_flye {
   // nano-raw to input dla wersji przed guppym 5+ z duza liczba bledow
@@ -2153,7 +2192,7 @@ process run_flye {
   // wedlug issue z githuba https://github.com/mikolmogorov/Flye/issues/640
   // ten problem dalej istnieje 
 
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Predicting scaffold with flye for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   cpus params.cpus
@@ -2161,25 +2200,16 @@ process run_flye {
   // hence I increased maxforks to 10
   maxForks 10 
   input:
-  tuple val(x), path(fastq_gz), val(SPECIES), val(GENUS), val(QC_status_contaminations)
+  tuple val(x), path(fastq_gz), val(SPECIES), val(GENUS), val(QC_status)
   output:
-  tuple val(x), path('output/assembly.fasta'), env(QC_status)
+  tuple val(x), path('output/assembly.fasta')
   
   script:
   """
   # /data/Flye to sciezka z Flye instalowanego z github, uwaga
   # w kontenerze tez jest flye instalowant przez etoki i ten jest w PATH
 
-  ### QC_status_contaminations na razie ignorujemy, zostanie ono przekazane do kanalu jeszcze raz po zaproponowaniu genomu
-  ### i tam bedzie uzywane
-
-  QC_status="pass"
-  ### Tutaj umieszcamy warunki na QC_status zwiazny ze startowa sekwencja (np za malo odczytow)
-  #### Do ustalenia, poki co 1000 czyli skrajnie malo
-  NO_READS=`zcat $fastq_gz | grep "^+" | wc -l`
-  
-  if [ \${NO_READS} -lt 10000 ]; then
-    QC_status="nie"
+  if [ ${QC_status} == "nie" ]; then
     mkdir output
     echo ">dummy_contig" >> output/assembly.fasta
     echo "AAAAAAAAAAAAA" >> output/assembly.fasta
@@ -2195,24 +2225,24 @@ process run_flye {
     fi
     /opt/docker/Flye/bin/flye --nano-raw ${fastq_gz} -g \${GENOME_SIZE} -o output -t ${task.cpus} -i 3 --no-alt-contig --deterministic
   fi
-
-
-  
-
   """
  
 }
 
 process clean_fastq_nanopore {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Fixing fastq dla sample $x"
   input:
-  tuple val(x), path(read)
+  tuple val(x), path(read), val(SPECIES), val(GENUS), val(QC_status)
   output:
-  tuple val(x), path('prep_out_L1_SE.fastq.gz')
+  tuple val(x), path('prep_out_L1_SE.fastq.gz'), val(SPECIES), val(GENUS), val(QC_status)
   script:
   """
-  python /opt/docker/EToKi/EToKi.py prepare --se ${read} -c ${params.cpus} -q ${params.quality} -p prep_out 
+  if [ ${QC_status} == "nie" ]; then
+    touch prep_out_L1_SE.fastq.gz
+  else
+    python /opt/docker/EToKi/EToKi.py prepare --se ${read} -c ${params.cpus} -q ${params.quality} -p prep_out 
+  fi
   """
 }
 
@@ -2221,11 +2251,11 @@ process clean_fastq_nanopore {
 process run_minimap2 {
   // Proces do mapowania odczytow na scaffold
   tag "Remapping of reads to predicted scaffold for sample $x"
-  container  = 'salmonella_illumina:2.0' 
+  container  = params.main_image 
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   maxForks 5
   input:
-  tuple val(x), path(fasta), val(QC_status), path(reads) 
+  tuple val(x), path(fasta), path(reads), val(SPECIES), val(GENUS), val(QC_status)
   output:
   tuple val(x), path('sorted.bam'), path(fasta), val(QC_status)
   script:
@@ -2244,11 +2274,11 @@ process run_minimap2_2nd {
   // Proces do mapowania odczytow na scaffold
   // W nanopre w jednym workflow uzywam go 2 razy wiec musze zrobic ta glupia kopie
   tag "Remapping of reads to predicted scaffold for sample $x"
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
   maxForks 5
   input:
-  tuple val(x), path(fasta), val(QC_status), path(reads)
+  tuple val(x), path(fasta), path(reads), val(SPECIES), val(GENUS), val(QC_status)
   output:
   tuple val(x), path('sorted.bam'), path(fasta), val(QC_status)
   script:
@@ -2264,48 +2294,47 @@ process run_minimap2_2nd {
   """
 }
 
-process run_pilon_nanopore {
-  // De facto slave run_pilon, ale akcpetujemy jeden bam
-  // Do testow nie wiem jak program zachowa sie na danych nanopre ktore sa kiepskie
-  // Moze wykladzac medaka ?
+// process run_pilon_nanopore {
+    // De facto slave run_pilon, ale akcpetujemy jeden bam
+    // Do testow nie wiem jak program zachowa sie na danych nanopre ktore sa kiepskie
+    // Moze wykladzac medaka ?
 
-  container  = 'salmonella_illumina:2.0'
-  // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
-  tag "Pilon for sample $x"
-  publishDir "pipeline_wyniki/${x}/pilon", mode: 'copy', pattern: 'latest_pilon.*'
-  maxForks 5
-  input:
-  tuple val(x), path(bam1), path(fasta)
-  output:
-  // tuple val(x), path('latest_pilon.fasta'), path('latest_pilon.changes'), emit: ALL
-  tuple val(x), path('latest_pilon.fasta'), emit: ONLY_GENOME
-  script:
-  """
-  # indeksacja bam-ow
-  /opt/docker/EToKi/externals/samtools index  $bam1
+  // container  = params.main_image
+  // // w kontenerze 2.0 dodalem pilona ale nie chce kasowac 1.0
+  // tag "Pilon for sample $x"
+  // publishDir "pipeline_wyniki/${x}/pilon", mode: 'copy', pattern: 'latest_pilon.*'
+  // maxForks 5
+  // input:
+  // tuple val(x), path(bam1), path(fasta)
+  // output:
+  // // tuple val(x), path('latest_pilon.fasta'), path('latest_pilon.changes'), emit: ALL
+  // tuple val(x), path('latest_pilon.fasta'), emit: ONLY_GENOME
+  // script:
+  // """
+  // # indeksacja bam-ow
+  // /opt/docker/EToKi/externals/samtools index  $bam1
 
-  # wywolanie pilon-a
-  java -jar /opt/docker/EToKi/externals/pilon.jar  --threads ${params.cpus} --defaultqual 5 --genome $fasta --unpaired $bam1 --output pilon_polish --vcf --changes --outdir pilon_out
+  // # wywolanie pilon-a
+  // java -jar /opt/docker/EToKi/externals/pilon.jar  --threads ${params.cpus} --defaultqual 5 --genome $fasta --unpaired $bam1 --output pilon_polish --vcf --changes --outdir pilon_out
 
-  # przygotowanie outputu
-  # cat pilon_bwa/pilon_polish.fasta | awk  -v ALA=${x} 'BEGIN{OFS=""}; {if(\$0 ~ />/) print \$0,"_", ALA; else print \$0}' >> last_pilon.fasta
-  cat pilon_out/pilon_polish.fasta >> latest_pilon.fasta
-  cp  pilon_out/pilon_polish.changes latest_pilon.changes
-  """
-}
+  // # przygotowanie outputu
+  // # cat pilon_bwa/pilon_polish.fasta | awk  -v ALA=${x} 'BEGIN{OFS=""}; {if(\$0 ~ />/) print \$0,"_", ALA; else print \$0}' >> last_pilon.fasta
+  // cat pilon_out/pilon_polish.fasta >> latest_pilon.fasta
+  // cp  pilon_out/pilon_polish.changes latest_pilon.changes
+  // """
+// }
 
 process run_medaka {
   // wygladzanie genomu medaka, nanopolish nie dziala bo nie mamy pliko fast5
 
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Medaka for sample $x"
   // publishDir "pipeline_wyniki/${x}/medaka", mode: 'copy', pattern: 'latest_pilon.*'
   maxForks 5
   input:
   tuple val(x), path(bam1), path(fasta), val(QC_status)
   output:
-  // tuple val(x), path('postmedaka.fasta'), path('medaka_annotated_filtered.vcf.gz'), emit: ALL
-  tuple val(x), path('postmedaka.fasta'), val(QC_status), emit: ONLY_GENOME
+  tuple val(x), path('postmedaka.fasta'), emit: ONLY_GENOME
   script:
   """
   if [ ${QC_status} == "nie" ]; then
@@ -2315,9 +2344,8 @@ process run_medaka {
     # indeksacja bam-ow
     samtools index $bam1
  
-    MODEL="r941_min_hac_g507"  
   
-    medaka inference --model \${MODEL} \
+    medaka inference --model ${params.model_medaka} \
                      --threads ${params.cpus} \
                      $bam1 \
                      forvariants.hdf
@@ -2344,7 +2372,7 @@ process run_medaka {
 process run_kraken2_nanopore {
   // kopia processu do illuminy, ale z uwzglednieniem ze jest tylko jeden plik z odczytami
   tag "kraken2:${x}"
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken*.txt"
@@ -2352,136 +2380,213 @@ process run_kraken2_nanopore {
   maxForks 6
 
   input:
-  tuple val(x), path(reads)
+  tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
 
   output:
   tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt')
 
   script:
   """
-  kraken2 --db /home/external_databases/kraken2 \
-          --report report_kraken2.txt \
-          --threads ${params.cpus} \
-          --gzip-compressed \
-          --minimum-base-quality ${params.quality} \
-          --use-names ${reads} >> report_kraken2_individualreads.txt 2>&1
+  if [ ${QC_STATUS} == "nie" ]; then
+    # upstream module failed we produce empty files do the pipeline can execute
+    touch report_kraken2.txt
+    touch report_kraken2_individualreads.txt
+    touch Summary_kraken_genera.txt
+    touch Summary_kraken_species.txt
+  else
+    kraken2 --db /home/external_databases/kraken2 \
+            --report report_kraken2.txt \
+            --threads ${params.cpus} \
+            --gzip-compressed \
+            --minimum-base-quality ${params.quality} \
+            --use-names ${reads} >> report_kraken2_individualreads.txt 2>&1
   
-  LEVEL="G"
+    LEVEL="G"
 
-  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
-  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
-  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
-  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
+    SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
+    SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
+    ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
+    ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
 
-  echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> Summary_kraken_genera.txt
+    echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> Summary_kraken_genera.txt
 
-  LEVEL="S"
-  SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
-  SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
-  ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
-  ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
+    LEVEL="S"
+    SPEC1=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f6 | tr -d "="`
+    SPEC2=`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}' | grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f6 | tr -d "="`
+    ILE1==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -1 | tr -s " " | cut -f1 | tr -d " "`
+    ILE2==`cat report_kraken2.txt  | awk '{if(\$1 != 0.00) print \$0}'| grep -w \${LEVEL} | sort -rnk 1 | head -2 | tail -1 | tr -s " " | cut -f1 | tr -d " "`
 
-  echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> Summary_kraken_species.txt
+    echo -e "${x}\t\${SPEC1}\${ILE1}%\t\${SPEC2}\${ILE2}%" >> Summary_kraken_species.txt
+  fi
   """
 }
 
 process run_kmerfinder_nanopore {
   tag "kmerfinder:${x}"
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results.spa"
   containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
   maxForks 5
   cpus params.cpus
   input:
-  tuple val(x), path(reads)
+  tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
 
   output:
-  tuple val(x),path('results.spa'), path('results.txt'), env(SPECIES), env(GENUS)
+  tuple val(x),path('results.spa'), path('results.txt'), env(SPECIES), env(GENUS), val(QC_STATUS), val(TOTAL_BASES)
 
   script:
   """
-  /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
-  cp kmerfider_out/results.spa .
-  cp kmerfider_out/results.txt .
+  if [ ${QC_STATUS} == "nie" ]; then
+    # upstream module failed we produce empty files do the pipeline can execute
+    touch results.spa
+    touch results.txt
+    SPECIES=""
+    GENUS=""
+  else
+    /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+    cp kmerfider_out/results.spa .
+    cp kmerfider_out/results.txt .
   
-  SPECIES=`python /data/parse_kmerfinder.py kmerfider_out/data.json species`
-  GENUS=`python /data/parse_kmerfinder.py kmerfider_out/data.json genus`
+    SPECIES=`python /data/parse_kmerfinder.py kmerfider_out/data.json species`
+    GENUS=`python /data/parse_kmerfinder.py kmerfider_out/data.json genus`
+  fi
   """
 }
 
 process get_species_nanopore {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
-container  = 'salmonella_illumina:2.0'
+container  = params.main_image
 tag "Predicting species for ${x}"
 publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
+publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "contaminations.json"
 input:
-tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS)
+tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS), val(QC_STATUS), val(TOTAL_BASES)
 
 output:
-tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contaminations), emit: species
-path('predicted_genus_and_species.txt'), emit: output
+tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contaminations), emit: species_and_qcstatus
+path('predicted_genus_and_species.txt'), emit: to_pubdir
+tuple val(x), path('contaminations.json'), emit: json
+tuple val(x), env(QC_status_contaminations), emit: qcstatus_only
 script:
 """
-QC_status_contaminations="pass"
-PRE_FINALE_SPECIES=""
-cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
-echo ${KMERFINDER_SPECIES} | cut -d ' ' -f1-2  >> intermediate.txt
-PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
-
-KRAKEN_GENUS_LEVEL=`cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print int(\$1)}'`
-KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f9 | awk '{print int (\$1)}'`
-
-if [[ \${KRAKEN_GENUS_LEVEL} -lt 50 && \${KMERFINDER_COVERAGE} -lt 30 ]]; then
-# kraken2 zwraca mniej nizd 50% odczytow nalezacych do glownego gatunku
-# kmerfinder zwraca pokrycie pierwszego gatunku ponizej 30
-QC_status_contaminations="nie"
-fi
-
-
-if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then
-    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
-elif [[ "\${PRE_FINALE_SPECIES}" == *"Escher"* || "\${PRE_FINALE_SPECIES}" == *"Shigella"* ]]; then
-    FINALE_SPECIES="Escherichia coli"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter coli" ]]; then
-    FINALE_SPECIES="jejuni"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter jejuni" ]]; then
-    FINALE_SPECIES="jejuni"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter concisus" ]]; then
-    FINALE_SPECIES="concisus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter curvus" ]]; then
-    FINALE_SPECIES="concisus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter fetus" ]]; then
-    FINALE_SPECIES="fetus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter helveticus" ]]; then
-    FINALE_SPECIES="helveticus"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter hyointestinalis" ]]; then
-    FINALE_SPECIES="hyointestinalis"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter insulaenigrae" ]]; then
-    FINALE_SPECIES="insulaenigrae"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lanienae" ]]; then
-    FINALE_SPECIES="lanienae"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lari" ]]; then
-    FINALE_SPECIES="lari"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
-    FINALE_SPECIES="sputorum"
-elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
-    FINALE_SPECIES="upsaliensis"
+if [ ${QC_STATUS} == "nie" ]; then
+  QC_status_contaminations="nie"
+  FINALE_SPECIES="unknown"
+  FINAL_GENUS="unknown"
+  echo "This module was eneterd with failed QC and poduced no valid output" >> predicted_genus_and_species.txt
+  # contaminations json
+  python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json nie
 else
-    FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
+  QC_status_contaminations="tak"
+  PRE_FINALE_SPECIES=""
+  cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate.txt
+  echo ${KMERFINDER_SPECIES} | cut -d ' ' -f1-2  >> intermediate.txt
+  
+  KRAKEN_GENUS_LEVEL=`cat report_kraken2.txt | grep -w "S" | sort -rnk1 | head -1 | awk '{print int(\$1)}'`
+  KMERFINDER_COVERAGE=`cat results.txt | head -2 |  tail -1 | cut -f9 | awk '{print int (\$1)}'`
+
+  if [[ \${KRAKEN_GENUS_LEVEL} -lt 50 && \${KMERFINDER_COVERAGE} -lt 30 ]]; then
+    # kraken2 zwraca mniej nizd 50% odczytow nalezacych do glownego gatunku
+    # kmerfinder zwraca pokrycie pierwszego gatunku ponizej 30
+    QC_status_contaminations="nie"
+    FINALE_SPECIES="unknown"
+    FINAL_GENUS="unknown"
+    echo -e "The sample is contaminated or lacks sufficient number of reads" >> predicted_genus_and_species.txt
+    python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json blad
+  else
+    PRE_FINALE_SPECIES=`cat intermediate.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3,4`
+
+    if [[ "\${PRE_FINALE_SPECIES}" == *"Salmonel"* ]]; then
+      FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
+      GENOME_SIZE=5400000
+    elif [[ "\${PRE_FINALE_SPECIES}" == *"Escher"* || "\${PRE_FINALE_SPECIES}" == *"Shigella"* ]]; then
+      FINALE_SPECIES="Escherichia coli"
+      GENOME_SIZE=4800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter coli" ]]; then
+      FINALE_SPECIES="jejuni"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter jejuni" ]]; then
+      FINALE_SPECIES="jejuni"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter concisus" ]]; then
+      FINALE_SPECIES="concisus"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter curvus" ]]; then
+      FINALE_SPECIES="concisus"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter fetus" ]]; then
+      FINALE_SPECIES="fetus"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter helveticus" ]]; then
+      FINALE_SPECIES="helveticus"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter hyointestinalis" ]]; then
+      FINALE_SPECIES="hyointestinalis"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter insulaenigrae" ]]; then
+      FINALE_SPECIES="insulaenigrae"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lanienae" ]]; then
+      FINALE_SPECIES="lanienae"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter lari" ]]; then
+      FINALE_SPECIES="lari"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter sputorum" ]]; then
+      FINALE_SPECIES="sputorum"
+      GENOME_SIZE=1800000
+    elif [[ "\${PRE_FINALE_SPECIES}" == "Campylobacter upsaliensis" ]]; then
+      FINALE_SPECIES="upsaliensis"
+      GENOME_SIZE=1800000
+    else
+      FINALE_SPECIES="\${PRE_FINALE_SPECIES}"
+      GENOME_SIZE=6000000
+    fi
+
+    cat report_kraken2.txt | grep -w "G" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate_genus.txt
+    echo -e "${KMERFINDER_GENUS} " >> intermediate_genus.txt
+
+    FINAL_GENUS=`cat intermediate_genus.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3`
+
+    echo -e "Final genus:\t\${FINAL_GENUS}\nFinal species:\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
+
+    TEORETICAL_COVERAGE=`awk -v g_size="\${GENOME_SIZE}" -v t_bases="${TOTAL_BASES}" 'BEGIN {print t_bases/g_size}'`
+    if [ `awk -v tot_cov=\${TEORETICAL_COVERAGE} 'BEGIN {if(tot_cov > 20) {print 1} else {print 0}}'` -eq 1 ]; then
+      python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json tak
+      QC_status_contaminations="tak"
+    else
+      python /opt/docker/EToKi/externals/json_output_contaminations.py bacterial_illumina contaminations.json blad
+      QC_status_contaminations="nie"
+    fi
+  fi
 fi
-
-
-cat report_kraken2.txt | grep -w "G" | sort -rnk1 | head -1 | awk '{print \$6,\$7}' >> intermediate_genus.txt
-echo -e "${KMERFINDER_GENUS} " >> intermediate_genus.txt
-
-FINAL_GENUS=`cat intermediate_genus.txt | sort | uniq -c | tr -s " " | sort -rnk1 | head -1 | cut -d " " -f3`
-
-echo -e "Final genus:\t\${FINAL_GENUS}\nFinal species:\t\${FINALE_SPECIES}" >> predicted_genus_and_species.txt
 
 """
 }
 
 // SUB WORKFLOWS NANOPORE //
+
+workflow predict_species_nanopore {
+// Workflow puszcza 2 programy (kraken2,  kmerfinder)
+// Metaphlan puszcza bowtie2 ktoru jest dla krtokich odczytow
+take:
+initial_fastq
+inital_qc_status
+main:
+initial_fastq_and_status = initial_fastq.join(inital_qc_status, by : 0, remainder : true)
+// kraken
+kraken2_out = run_kraken2_nanopore(initial_fastq_and_status)
+
+// Kmerfinder
+kmerfinder_out = run_kmerfinder_nanopore(initial_fastq_and_status)
+
+programs_out = kraken2_out.join(kmerfinder_out,  by : 0, remainder : true)
+final_species = get_species_nanopore(programs_out)
+emit:
+final_species.species_and_qcstatus
+final_species.qcstatus_only
+
+}
 
 workflow polishing_with_medaka {
 // pilona puscimy tylko raz bo zakladam ze flye po cos te rundy filtrowania robi 
@@ -2653,24 +2758,6 @@ final_species.species_and_qcstatus
 final_species.qcstatus_only
 }
 
-workflow predict_species_nanopore {
-// Workflow puszcza 2 programy (kraken2,  kmerfinder)
-// Metaphlan puszcza bowtie2 ktoru jest dla krtokich odczytow
-take:
-initial_fastq
-main:
-// kraken
-kraken2_out = run_kraken2_nanopore(initial_fastq)
-
-// Kmerfinder
-kmerfinder_out = run_kmerfinder_nanopore(initial_fastq)
-
-programs_out = kraken2_out.join(kmerfinder_out,  by : 0, remainder : true)
-final_species = get_species_nanopore(programs_out)
-emit:
-final_species.species
-
-}
 // MAIN WORKFLOW //
 
 workflow {
@@ -2716,16 +2803,20 @@ Channel
   .set {initial_fastq}
 
 // FASTQC
-run_fastqc_nanopore(initial_fastq)
+run_fastqc_nanopore_out = run_fastqc_nanopore(initial_fastq)
 
 // Contaminations/subspecies prediction
-predict_species_out = predict_species_nanopore(initial_fastq)
+(predict_species_out, predict_species_qc) = predict_species_nanopore(initial_fastq, run_fastqc_nanopore_out.qcstatus_and_values)
+
+//Initial MLST
+initial_mlst_out = run_initial_mlst_nanopore(initial_fastq.join(predict_species_out, by : 0)) // initial_mlst_out  przekazuje zarowno fastq jak i qc_status
 
 // FASTQ trimming
-processed_fastq = clean_fastq_nanopore(initial_fastq)
+
+processed_fastq = clean_fastq_nanopore(initial_mlst_out)
 
 // initial scaffold with Flye (with 3 internalrounds of polishing)
-initial_scaffold = run_flye(processed_fastq.join(predict_species_out))
+initial_scaffold = run_flye(processed_fastq)
 
 // one round of assembly polishing with medaka
 (final_assembly, final_assembly_with_reject) = polishing_with_medaka(initial_scaffold, processed_fastq)
