@@ -242,6 +242,6 @@ RUN wget -O /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyp
 
 # Custom scripts 
 COPY bin/all_functions_salmonella.py bin/run_blastn_ver11.sh bin/parse_fastqc_output.py geojeson/ne_10m_admin_0_countries.geojson bin/plot_historical_data_plotly.py  bin/parse_kmerfinder.py /data/
-COPY bin/json_output_contaminations.py bin/coverage_filter.py bin/calculate_stats.py bin/run_VFDB.sh bin/run_fastqc_and_generate_json.py bin/initial_mlst_parser.py /opt/docker/EToKi/externals
+COPY bin/json_output_contaminations.py bin/coverage_filter.py bin/calculate_stats.py bin/run_VFDB.sh bin/run_fastqc_and_generate_json.py bin/initial_mlst_parser.py bin/extract_final_stats_parser.py /opt/docker/EToKi/externals
 
 CMD ["/bin/bash"]

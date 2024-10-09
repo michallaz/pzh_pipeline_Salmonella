@@ -32,11 +32,11 @@ if ( params.machine  == 'Illumina' ) {
   params.main_genus_value = 50 // At least 50% of reads are predicted to belong to the main genus identified in a sample
   params.kmerfinder_coverage = 20 // For kmerfinder we usea  different value, expected coverage for main species
   params.main_species_coverage = 20 // After identyfing a species we calculate theoretical coverage at a "genus" level. 
-  params.min_genome_length = 0.75 // The length of a proposed genome is at least 75% of genome length for a genus identified in a sample
+  params.min_genome_length = 0.75 // The completness of the proposed genome is at least 75% of genome length for a genus identified in a sample
   params.unique_loci = 5 // In 7-gene MLST schema we expect to see at least that many uniqe and valid loci using raw reads data
   params.contig_number = 1000 // We expect to see less that that many contigs
   params.L50 = 30000 // We expect that L50 will have at least that value
-  params.final_coverage = 20 // We expect that the average coverage calculated using assembled genome is that much
+  params.final_coverage = 20 // We expect that the average coverage calculated using assembled genome is that much 
 } else if (params.machine  == 'Nanopore') {
   // QC parameter for nanopore sample, some are identical with therir illumina counterparts
   params.quality = 2
@@ -264,13 +264,13 @@ process spades {
   // Powstaly plik fasta jest poprawiany bo Hapo-G nie akceptuje "." w nazwach sekwencji w pliku fasta
   // Modul definiuje QC_status az do modulu extract_final_stats, gdzie status moze ulec zmianie
   cpus params.cpus
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Spades dla sample $x"
   maxForks 5
   input:
   tuple val(x), path('R1.fastq.gz'), path('R2.fastq.gz'), path('SE.fastq.gz'), val(QC_status)
   output:
-  tuple val(x),  path('scaffolds_fix.fasta'), env(QC_status)
+  tuple val(x),  path('scaffolds_fix.fasta'), val(QC_status)
   script:
   """
   #  for 150bp reads SPAdes uses k-mer sizes 21, 33, 55, 77
@@ -298,7 +298,7 @@ process spades {
 process bwa_paired {
   // Funkcja do mapowania odczytow Pair-end
   cpus params.cpus
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "RE-mapowanie PE dla sample $x"
   maxForks 5
   input:
@@ -321,7 +321,7 @@ process bwa_paired {
 process bwa_single {
   // Funkcja do mapowania odczytow Single-end na genom
   cpus params.cpus
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "RE-mapowanie SE dla sample $x"
   maxForks 5
   input:
@@ -343,7 +343,7 @@ process bwa_single {
 process merge_bams {
   // process do mergowania bam-ow
   // Uzywany w workflow calculate_coverage
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Merging bam files for sample $x"
   input:
   tuple val(x), path(bam1), path(bam2)
@@ -362,8 +362,7 @@ process merge_bams {
 
 process run_pilon {
   // Dokladne uzycie pilona jest tu https://github.com/broadinstitute/pilon/wiki/Requirements-&-Usage
-  // Pilon tylko przekazuje QC_status bez mozliwosci zmiany
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Pilon for sample $x"
   maxForks 5
   // publishDir "pilon_wyniki/${x}", mode: 'copy'
@@ -399,7 +398,7 @@ process extract_final_contigs {
   // Liczenie pokrycia dla kazdego contiga polaczona z filtorwanie odczytow
   // Przy uzyciu NASZEGO skryptu
   // Modukl przekazuje bez mozliwosci zmiany QC_stauts
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Coverage-based filtering for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
   maxForks 5
@@ -416,32 +415,52 @@ process extract_final_contigs {
     touch Rejected_contigs.fa   
   else
     /opt/docker/EToKi/externals/samtools index  $bam1
-    python  /opt/docker/EToKi/externals/coverage_filter.py genomic_fasta.fasta $bam1 ${params.min_coverage_ratio}
+    # Na rzyczenie tomka nie przechodza dalej contigi ktore maja
+    # 1.pokrycie nizsze niz 0.1 sredniego pokrycia w probce
+    # I (AND)
+    # 2.pokrycie jest ponizej niz 20
+    # oba parametry ustawione sa jako cechy pipeline na poczatku 
+    python /opt/docker/EToKi/externals/coverage_filter.py genomic_fasta.fasta $bam1 ${params.min_coverage_ratio} ${params.final_coverage}
   fi
   """
 }
 
 process extract_final_stats {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Calculating basic statistics for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "bacterial_genome_data.json"
   input:
-  tuple val(x), path(fasta), path(fasta_reject), val(QC_status)
+  tuple val(x), path(fasta), path(fasta_reject), val(QC_status), val(GENUS)
   output:
-  tuple val(x), path('Summary_statistics.txt'), path('Summary_statistics_with_reject.txt'), env(QC_status), emit: STATISTICS
-  tuple val(x), path(fasta), env(QC_status), emit: GENOME
+  tuple val(x), path('Summary_statistics.txt'), path('Summary_statistics_with_reject.txt'), env(QC_status_exit), emit: STATISTICS
+  tuple val(x), path(fasta), env(QC_status_exit), emit: GENOME
+  tuple val(x), path('bacterial_genome_data.json'), emit: json
   script:
   """
+  if [[ "${GENUS}" == *"Salmo"* ]]; then
+    GENOME_SIZE=5400000
+  elif [[ "${GENUS}" == *"Escher"* ]]; then
+    GENOME_SIZE=4800000
+  elif [ ${GENUS} == "Campylobacter" ]; then
+    GENOME_SIZE=1800000
+  else
+    # Bez znaczenia bo moduly wyzej zwroca QC_status nie w takiej sytuacji, ale tutaj moze wejsc ponownie ten zly genus
+    # a moj skrypt do parsowania wymaga podania tej wartosci
+    GENOME_SIZE=6000000
+  fi 
+
   if [ ${QC_status} == "nie" ]; then
      touch Summary_statistics.txt
      touch Summary_statistics_with_reject.txt
-     QC_status="nie" # jako ze output to env, musimy w srodowisku ustalic ta zmienne inaczej program nie "przechwyci" do output QC_status
+     ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+     QC_status_exit=`python /opt/docker/EToKi/externals/extract_final_stats_parser.py -l ${params.L50} -n ${params.contig_number} -g \${GENOME_SIZE} -c ${params.min_genome_length} -p ${params.final_coverage} -s ${QC_status} -r "\${ERR_MSG}" -o bacterial_genome_data.json`
   else
     cat $fasta $fasta_reject >> all_contigs.fasta
     python  /opt/docker/EToKi/externals/calculate_stats.py $fasta all_contigs.fasta
-    # Tutaj parsujemy output Summary_statistics.txt aby ocenic czy genom ma odpowiednia dlugosc, ilosc contigow nie jest absurdalna itd
-    # Wiec tu jest potencjalny switch z pass do fail
-    QC_status="tak"
+    
+    QC_status_exit=`python /opt/docker/EToKi/externals/extract_final_stats_parser.py -i Summary_statistics.txt -j Summary_statistics_with_reject.txt -l ${params.L50} -n ${params.contig_number} -g \${GENOME_SIZE} -c ${params.min_genome_length} -p ${params.final_coverage} -s tak -o bacterial_genome_data.json`
+
   fi
   """
 }
@@ -2052,6 +2071,8 @@ tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contamination
 path('predicted_genus_and_species.txt'), emit: to_pubdir 
 tuple val(x), path('contaminations.json'), emit: json
 tuple val(x), env(QC_status_contaminations), emit: qcstatus_only
+tuple val(x), env(FINAL_GENUS), emit: genus_only
+
 script:
 """
 if [ ${QC_STATUS} == "nie" ]; then
@@ -2487,6 +2508,7 @@ tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contamination
 path('predicted_genus_and_species.txt'), emit: to_pubdir
 tuple val(x), path('contaminations.json'), emit: json
 tuple val(x), env(QC_status_contaminations), emit: qcstatus_only
+tuple val(x), env(FINAL_GENUS), emit:genus_only
 script:
 """
 if [ ${QC_STATUS} == "nie" ]; then
@@ -2606,7 +2628,7 @@ programs_out = kraken2_out.join(kmerfinder_out,  by : 0, remainder : true)
 final_species = get_species_nanopore(programs_out)
 emit:
 final_species.species_and_qcstatus
-final_species.qcstatus_only
+final_species.genus_only
 
 }
 
@@ -2777,7 +2799,7 @@ programs_out = kraken2_out.join(merge1,  by : 0, remainder : true)
 final_species = get_species_illumina(programs_out)
 emit:
 final_species.species_and_qcstatus
-final_species.qcstatus_only
+final_species.genus_only
 }
 
 // MAIN WORKFLOW //
@@ -2795,7 +2817,7 @@ Channel
 run_fastqc_illumina_out = run_fastqc_illumina(initial_fastq)
 
 // Species prediction
-(predict_species_out, predict_species_qc) = predict_species_illumina(initial_fastq, run_fastqc_illumina_out.qcstatus_and_values)
+(predict_species_out, predict_species_genus) = predict_species_illumina(initial_fastq, run_fastqc_illumina_out.qcstatus_and_values)
 
 
 //Inilat MLST
@@ -2828,7 +2850,7 @@ Channel
 run_fastqc_nanopore_out = run_fastqc_nanopore(initial_fastq)
 
 // Contaminations/subspecies prediction
-(predict_species_out, predict_species_qc) = predict_species_nanopore(initial_fastq, run_fastqc_nanopore_out.qcstatus_and_values)
+(predict_species_out, predict_species_genus) = predict_species_nanopore(initial_fastq, run_fastqc_nanopore_out.qcstatus_and_values)
 
 //Initial MLST
 initial_mlst_out = run_initial_mlst_nanopore(initial_fastq.join(predict_species_out, by : 0)) // initial_mlst_out  przekazuje zarowno fastq jak i qc_status
@@ -2845,9 +2867,10 @@ initial_scaffold = run_flye(processed_fastq)
 
 }
 
-
+// All modules below are shared between nanopore and illumina
 // Assembly quality
-(extract_final_stats_statistics, extract_final_stats_genome) = extract_final_stats(final_assembly_with_reject)
+
+(extract_final_stats_statistics, extract_final_stats_genome, extract_final_stats_json) = extract_final_stats(final_assembly_with_reject.join(predict_species_genus,  by : 0))
  
 
 // Species prediction with Achtman and core genome shemes

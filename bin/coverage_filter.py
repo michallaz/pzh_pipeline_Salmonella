@@ -23,16 +23,19 @@ def read_genome_boundaries(fasta):
         dlugosci_segmentow[segment.id] =  len(segment.seq)
     return dlugosci_segmentow
 
-def filter_fastas(input_fasta, output_fasta, slownik_pokryc, global_coverage, threshold):
+def filter_fastas(input_fasta, output_fasta, slownik_pokryc, global_coverage, threshold, threshold_coverage):
     """
     Skrypt zapisuje do pliku output_fasta tylko te contigi z pliku input_fasta,
     ktorych pokrycie (trzymane w slowniku slownik_pokryc) wynosi co najmniej threshold * global_coverage
+    oraz jest wieksze niz threshold_coverage
+    De facto wprowadzenie tego warunku wywala wszystkie contigi z pokryciem mniejszym niz
+    threshold_coverage
     Outputowa fasta ma dodawana w naglowku _cov_X, gdzie X to wartosc
     """
     record= SeqIO.parse(input_fasta, 'fasta')
     with open(output_fasta, 'w') as plik, open('Rejected_contigs.fa', 'w') as reject:
         for r in record:
-            if slownik_pokryc[r.id] > (global_coverage * threshold):
+            if slownik_pokryc[r.id] > (global_coverage * threshold) and slownik_pokryc[r.id] > threshold_coverage:
                 plik.write(f'>{r.id}_cov_{slownik_pokryc[r.id]}\n')
                 plik.write(f'{str(r.seq)}\n')
             else:
@@ -46,6 +49,7 @@ def filter_fastas(input_fasta, output_fasta, slownik_pokryc, global_coverage, th
 reference_genome=sys.argv[1] # plik z contigami
 plik_bam = sys.argv[2] # bam zmapowany na contigi
 threshold = float(sys.argv[3]) # minimalna frakcja sredniego pokrycia contigu w stosunku do pokrycia globalnego
+threshold_coverage = float(sys.argv[3])
 qual = 5 # ignorujemy slabe zasady, ustawiamy "na sztywno" bo nie jest to bardzo wazny parametr w tym przypadku
 
 dlugosci_segmentow = read_genome_boundaries(reference_genome)
@@ -68,5 +72,5 @@ for segment in dlugosci_segmentow:
     slownik_pokryc[segment] = np.mean(segment_coverage)
 
 ## Zapisywanie outputu ##
-filter_fastas(reference_genome, 'final_scaffold_filtered.fa', slownik_pokryc, np.mean(global_coverage), threshold)
+filter_fastas(reference_genome, 'final_scaffold_filtered.fa', slownik_pokryc, np.mean(global_coverage), threshold, threshold_coverage)
 

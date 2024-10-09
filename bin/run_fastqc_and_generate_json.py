@@ -62,7 +62,8 @@ def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, p
     else:
         # upewnijmy sie ze podany plik wogole istnieje
         try:
-            open(input_file)
+            with open(input_file) as dummy:
+                pass
         except FileNotFoundError:
             status = 'blad'
             json_dict = [{"status": {status}, "file_name": input_file, "step_name": stage,
