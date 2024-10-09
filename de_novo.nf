@@ -33,7 +33,7 @@ if ( params.machine  == 'Illumina' ) {
   params.kmerfinder_coverage = 20 // For kmerfinder we usea  different value, expected coverage for main species
   params.main_species_coverage = 20 // After identyfing a species we calculate theoretical coverage at a "genus" level. 
   params.min_genome_length = 0.75 // The length of a proposed genome is at least 75% of genome length for a genus identified in a sample
-  params.min_number_of_allels = 5 // In 7-gene MLST schema we expect to see at least that many uniqe and valid loci using raw reads data
+  params.unique_loci = 5 // In 7-gene MLST schema we expect to see at least that many uniqe and valid loci using raw reads data
   params.contig_number = 1000 // We expect to see less that that many contigs
   params.L50 = 30000 // We expect that L50 will have at least that value
   params.final_coverage = 20 // We expect that the average coverage calculated using assembled genome is that much
@@ -46,7 +46,7 @@ if ( params.machine  == 'Illumina' ) {
   params.kmerfinder_coverage = 20
   params.main_species_coverage = 20
   params.min_genome_length = 0.75
-  params.min_number_of_allels = 5
+  params.unique_loci = 5
   params.contig_number = 100
   params.L50 = 300000
   params.final_coverage = 20
@@ -131,7 +131,7 @@ process run_fastqc_illumina {
 }
 
 process run_fastqc_nanopore {
-  // Modification of run_fastqc_illumina 
+  // ModiQC_status_exit="tak"fication of run_fastqc_illumina 
   // That requires one fastq.gz file
   tag "fastqc for sample ${x}"
   container  = params.main_image
@@ -210,43 +210,51 @@ process clean_fastq_illumina {
 
 
 process run_initial_mlst_illumina {
-  // Pierwszy check MLSDT 7 genomwego dla celow QC
+  // Pierwszy check MLST 7 genomwego dla celow QC
   // z wykorzystaniem soft cge
-  // Proces wymaga zarwono golych odczytow, jak i informacji o gatunku, wiec bedzie 'wpiety' po species prediciton
-  // Jego QC jest wazne i jego wynik bedzie wpiety jako input do skladania genomu
-  // w tym celu wstawimy zmienna QC_status, ktora bedzie 'podrozowac' razem z samplem
-  // jesli qc_status bedzie fail to procesy potomne sie nie uruchomia ? zwroca dummy wartosci ?
-  container  = 'salmonella_illumina:2.0'
+  // Proces jest switchem dla wartosci QC
+  // Zmienia status z tak na nie jesli gatunek to cos innego niz Salmonellea, Campylo lub Ecoli
+  // oraz jesli liczba unikalnych loci nie wynosi co najmniej 5 (parametr params.unique_loci) 
+  container  = params.main_image
   tag "Initial MLST for sample $x"
-  maxForks 5
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "initial_mlst.json"
+  maxForks 10
   input:
   tuple val(x), path(reads), val(SPECIES), val(GENUS), val(QC_status)
   output:
-  tuple val(x), path(reads), env(QC_status_exit)
+  tuple val(x), path(reads), env(QC_status_exit), emit: reads_and_status
+  tuple val(x), path('initial_mlst.json'), emit: json
   script:
   read_1 = reads[0]
   read_2 = reads[1]
   """
+  QC_status_exit="${QC_status}"
   mkdir tmp
   if [ ${QC_status} == "nie" ]; then
-    QC_status_exit="nie"
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output" 
+    QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -s ${QC_status} -r "\${ERR_MSG}" -o initial_mlst.json`
   else
     if [[ "${GENUS}" == *"Salmo"* ]]; then
-    python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
+      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
     elif [[ "${GENUS}" == *"Escher"* ]]; then
-    python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s ecoli -p /opt/docker/mlst_db/ -mp kma -t tmp/
+      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s ecoli -p /opt/docker/mlst_db/ -mp kma -t tmp/
     elif [ ${GENUS} == "Campylobacter" ]; then
-    # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd .. 
-    python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
+      # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd .. 
+      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
     else
       # We encountered wrong genus
-      QC_status_exit="nie"
+      ERR_MSG=`echo This program is intended to work with following genera: Salmonella, Escherichia, and Campylobacter. Genus identified in this sample is: ${GENUS}`
+      QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -s blad -r "\${ERR_MSG}" -o initial_mlst.json`
     fi
 
-    # Parsowanie wyniku
-
-    # Warunki do QC 
-    QC_status_exit="tak"
+    # Parsowanie wyniku i zwracanie json i statusu QC
+    if [ \${QC_status_exit} == "tak" ] ;then
+      # mamy poprawny gatunek (QC status nie zmienil sie na nie wyzej)
+      # QC moze zienic sie na "nie" jesli nie spelania parametru QC
+      # RESEULT=`ls *res` # plik ma zwykle nazwe kma_{nazwa_gatunkut}_{nazwapliku_fastq do momentu spotkania R{1,2}, przy czym numer jest opusczany}.res
+      OUT_FILE=`ls *res`
+      QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -i "\${OUT_FILE}" -x ${params.unique_loci}  -s tak -o initial_mlst.json`
+    fi
   fi
   """
 }
@@ -2155,16 +2163,20 @@ process run_initial_mlst_nanopore {
   // Kopia procesu dla illuminy ale obslugujacy jeden plik fastq.gz
   container  = params.main_image
   tag "Initial MLST for sample $x"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "initial_mlst.json"
   maxForks 5
   input:
   tuple val(x), path(reads), val(SPECIES), val(GENUS), val(QC_status)
   output:
-  tuple val(x), path(reads), val(SPECIES), val(GENUS), env(QC_status_exit)
+  tuple val(x), path(reads), val(SPECIES), val(GENUS), env(QC_status_exit), emit: reads_and_status
+  tuple val(x), path('initial_mlst.json'), emit: json
   script:
   """
   mkdir tmp
+  QC_status_exit="${QC_status}"
   if [ ${QC_status} == "nie" ]; then
-    QC_status_exit="nie"
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -s ${QC_status} -r "\${ERR_MSG}" -o initial_mlst.json`  
   else
     if [[ "${GENUS}" == *"Salmo"* ]]; then
     python /opt/docker/mlst/mlst.py -i ${reads} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
@@ -2174,15 +2186,18 @@ process run_initial_mlst_nanopore {
     # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd ..
     python /opt/docker/mlst/mlst.py -i ${reads} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
     else
-      # We encountered wrong genus
-      # Pipeline stops at this step
-      QC_status_exit="nie"
+      ERR_MSG=`echo This program is intended to work with following genera: Salmonella, Escherichia, and Campylobacter. Genus identified in this sample is: ${GENUS}`
+      QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -s blad -r "\${ERR_MSG}" -o initial_mlst.json`
     fi
 
-    # Parsowanie wyniku
+    if [ \${QC_status_exit} == "tak" ] ;then
+      # mamy poprawny gatunek (QC status nie zmienil sie na nie wyzej)
+      # QC moze zienic sie na "nie" jesli nie spelania parametru QC
+      # RESEULT=`ls *res` # plik ma zwykle nazwe kma_{nazwa_gatunkut}_{nazwapliku_fastq do momentu spotkania R{1,2}, przy czym numer jest opusczany}.res
+      OUT_FILE=`ls *res`
+      QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -i "\${OUT_FILE}" -x ${params.unique_loci}  -s tak -o initial_mlst.json`
+    fi
 
-    # Warunki do QC
-    QC_status_exit="tak"
   fi
   """
 }
@@ -2787,7 +2802,7 @@ run_fastqc_illumina_out = run_fastqc_illumina(initial_fastq)
 
 initial_mlst_out = run_initial_mlst_illumina(initial_fastq.join(predict_species_out, by : 0)) // initial_mlst_out  przekazuje zarowno fastq jak i qc_status
 // FASTQ trimming
-processed_fastq = clean_fastq_illumina(initial_mlst_out)
+processed_fastq = clean_fastq_illumina(initial_mlst_out.reads_and_status)
 
 // Initial scaffold
 initial_scaffold = spades(processed_fastq.All_path)
@@ -2820,7 +2835,7 @@ initial_mlst_out = run_initial_mlst_nanopore(initial_fastq.join(predict_species_
 
 // FASTQ trimming
 
-processed_fastq = clean_fastq_nanopore(initial_mlst_out)
+processed_fastq = clean_fastq_nanopore(initial_mlst_out.reads_and_status)
 
 // initial scaffold with Flye (with 3 internalrounds of polishing)
 initial_scaffold = run_flye(processed_fastq)
