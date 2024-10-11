@@ -517,11 +517,13 @@ process parse_7MLST {
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Parsing MLST for sample $x"
   publishDir "pipeline_wyniki/${x}/MLST", mode: 'copy', pattern: 'MLST*txt'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'MLST.json'
   maxForks 1
   input:
   tuple val(x), path('MLSTout.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations) 
   output:
   tuple val(x), path('MLST_parsed_output.txt'), path('MLST_sample_full_list_of_allels.txt'), path('MLST_closest_ST_full_list_of_allels.txt')
+  tuple val(x), path('MLST.json')
   // when:
   // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
@@ -529,6 +531,7 @@ process parse_7MLST {
 #!/usr/bin/python
 import sys
 import re
+import json
 
 sys.path.append('/data')
 from all_functions_salmonella import *
@@ -537,6 +540,8 @@ species="$SPECIES"
 genus="$GENUS"
 qc_status="$QC_status"
 qc_status_contaminations="$QC_status_contaminations"
+
+
 
 ### Determine correct paths to /db
 ### Prepare dummy output if provided SPECIES is not handled
@@ -552,6 +557,9 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
         f3.write(f'ST\\tComment\\n')
         f3.write(f'unk\\tUnknown species: {species}')
     # json na zle QC
+    json_dict = {"scheme_name": "MLST", "status": qc_status, "error_message": "This module was eneterd with failed QC and poduced no valid output"}
+    with open('MLST.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0)
 
 if re.findall('Salmo', genus) or re.findall('Esch', genus):
@@ -559,6 +567,8 @@ if re.findall('Salmo', genus) or re.findall('Esch', genus):
 elif species in ['concisus','fetus','helveticus','hyointestinalis','insulaenigrae','jejuni','lanienae','lari','sputorum','upsaliensis']:
     sciezka=f'/db/{genus}/{species}/MLST'
 else:
+    # To nie powinno sie nigdy wykonac bo gatunek jest switchem na QC w module run+initial_mlst
+    # Ale gdyby jednak sie wykonywalo to znaczy ze jest cos nie tak z pipeline
     with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_allels.txt', 'w') as f2, open('MLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
         f1.write(f'ST\\tComment\\n')
         f1.write(f'unk\\tUnknown species: {species}\\n')
@@ -568,15 +578,24 @@ else:
 
         f3.write(f'ST\\tComment\\n')
         f3.write(f'unk\\tUnknown species: {species}')
-    # json na zly gatunek
+    json_dict = {"scheme_name": "MLST", "status": "error", "error_message": "This module was eneterd with wrong species and poduced no valid output"}
+    with open('MLST.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0)
+
 ### Deterine ST of out Sample
 known_profiles, klucze_sorted = create_profile(f'{sciezka}/profiles.list')
 identified_profile = parse_MLST_fasta('MLSTout.txt')
 matching_ST, min_value, matching_ST_profile, sample_profile, all_loci_names = getST(MLSTout = identified_profile, \
                                                                               profile_file = f'{sciezka}/profiles.list')
 
-
+# Struktura alleli zwracana do jsona
+missing_loci_value = 0
+list_to_dump = []
+for loci_name, allele_value in zip(all_loci_names.split("\\t"), sample_profile.split("\\t")):
+    list_to_dump.append({str(loci_name):int(allele_value)})
+    if int(allele_value) == -1:
+        missing_loci_value += 1
 ### matching_ST is a string
 ### matching_ST_profile, sample_profile, all_loci_names are all tab-separated strings
 ### min_valu is int
@@ -594,6 +613,17 @@ with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_a
 
         f2.write(f'ST\\t{all_loci_names}\\n')
         f2.write(f'{matching_ST}\\t{sample_profile}\\n')
+        json_dict = {"scheme_name" : "MLST", 
+                     "status" : "tak", 
+                     "profile_id" : matching_ST,
+                     "missing_allels_value": missing_loci_value,
+                     "closest_external_profile_id" : matching_ST,
+                     "closest_external_profile_distance" : min_value,  
+                     "duplicated_allels_value" : 0,
+                     "profile_allel_list" : list_to_dump,
+                     "comment" : "In external database"}
+        with open('MLST.json', "w") as f:
+            f.write(json.dumps(json_dict))        
 
     else:
         # Unknown profile
@@ -610,7 +640,17 @@ with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_a
 
             f2.write(f'ST\\t{all_loci_names}\\n')
             f2.write(f'{matching_ST_local}\\t{sample_profile}\\n')
-
+            json_dict = {"scheme_name" : "MLST",
+                         "status" : "tak",
+                         "profile_id" : matching_ST_local,
+                         "closest_external_profile_id" : matching_ST,
+                         "closest_external_profile_distance" : min_value,
+                         "missing_allels_value": missing_loci_value,
+                         "duplicated_allels_value" : 0,
+                         "profile_allel_list" : list_to_dump,
+                         "comment" : "In local database"}
+            with open('MLST.json', "w") as f:
+                f.write(json.dumps(json_dict))
         else:
             # new profile appending it to local database with new number  
             last_ST = 0
@@ -628,6 +668,17 @@ with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_a
 
             f2.write(f'ST\\t{all_loci_names}\\n')
             f2.write(f'{novel_profile_ST}\\t{sample_profile}\\n')
+            json_dict = {"scheme_name" : "MLST",
+                         "status" : "tak",
+                         "profile_id" : novel_profile_ST,
+                         "closest_external_profile_id" : matching_ST,
+                         "closest_external_profile_distance" : min_value,
+                         "missing_allels_value": missing_loci_value,
+                         "duplicated_allels_value" : 0,
+                         "profile_allel_list" : list_to_dump,
+                         "comment" : "Novel local database"}
+            with open('MLST.json', "w") as f:
+                f.write(json.dumps(json_dict))
 
 """
 }
@@ -855,7 +906,8 @@ process parse_cgMLST {
   tuple val(x), path('cgMLST.txt'), path('cgMLST_all_identical_allels.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations), emit: standard
-  path('cgMLST_all_identical_allels.txt'), emit: output
+  path('cgMLST_all_identical_allels.txt'), emit: to_pubdir
+  tuple val(x), path('cgMLST_part1.json'), emit: json 
   // when:
   // GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
   script:
@@ -863,6 +915,8 @@ process parse_cgMLST {
 #!/usr/bin/python
 import  sys
 import re
+import json
+
 sys.path.append('/data')
 from all_functions_salmonella import *
 
@@ -881,7 +935,9 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
 
         f3.write(f'ST\\tComment\\n')
         f3.write(f'unk\\tUnknown species: {species}')
-    # json na zle QC
+    json_dict = {"scheme_name": "cgMLST", "status": qc_status, "error_message": "This module was eneterd with failed QC and poduced no valid output"}
+    with open('cgMLST_part1.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0)
 
 
@@ -892,6 +948,7 @@ elif genus == 'Escherichia':
 elif species == 'jejuni':
     sciezka=f'/db/{genus}/jejuni/cgMLST_v2'
 else:
+    # W odroznieniu od MLST to moze sie stac, bo mamy cgMLST tylko dla C.jejuni/coli
     with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_of_allels.txt', 'w') as f2, open('cgMLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
         f1.write(f'ST\\tComment\\n')
         f1.write(f'unk\\tUnknown species: {species}\\n')
@@ -902,12 +959,35 @@ else:
         f3.write(f'ST\\tComment\\n')
         f3.write(f'unk\\tUnknown species: {species}')
     # json na zly gatunek
+    json_dict = {"scheme_name": "cgMLST", "status": "error", "error_message": "This module was eneterd with wrong species and poduced no valid output"}
+    with open('cgMLST_part1.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0) 
 
 identified_profile = parse_MLST_blastn('cgMLST.txt')
 
 matching_ST, min_value,  matching_ST_profile, sample_profile, all_loci_names = getST(MLSTout = identified_profile, \
                                                                                      profile_file = f'{sciezka}/profiles.list')
+
+list_to_dump = []
+missing_loci_value = 0
+for loci_name, allele_value in zip(all_loci_names.split("\\t"), sample_profile.split("\\t")):
+    list_to_dump.append({str(loci_name):int(allele_value)})
+    if int(allele_value) == -1:
+        missing_loci_value += 1
+
+# Extract duplicated loci
+duplicated_loci_value = 0
+with open('cgMLST_all_identical_allels.txt') as f:
+    for line in f:
+        line = line.split("\\t")
+        locus_name, allel_number = line[0], int(line[1].rstrip())
+        if allel_number > 1:
+            duplicated_loci_value += 1
+
+# Extract number of loci with no hits 
+
+      
 
 # Write info regarding closest ST from EXTERNAL database
 with open('cgMLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
@@ -924,6 +1004,18 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
 
         f2.write(f'ST\\t{all_loci_names}\\n')
         f2.write(f'{matching_ST}\\t{sample_profile}\\n')
+        json_dict = {"scheme_name" : "cgMLST",
+                     "status" : "tak",
+                     "profile_id" : matching_ST,
+                     "missing_allels_value": missing_loci_value,
+                     "closest_external_profile_id" : matching_ST,
+                     "closest_external_profile_distance" : min_value,
+                     "duplicated_allels_value" : duplicated_loci_value,
+                     "profile_allel_list" : list_to_dump}
+         
+        with open('cgMLST_part1.json', "w") as f:
+            f.write(json.dumps(json_dict))
+
    
     else:
         # look for a profile in "local" database 
@@ -935,6 +1027,18 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
 
             f2.write(f'ST\\t{all_loci_names}\\n')
             f2.write(f'{matching_ST_local}\\t{sample_profile}\\n')
+            json_dict = {"scheme_name" : "cgMLST",
+                         "status" : "tak",
+                         "profile_id" : matching_ST_local,
+                         "missing_allels_value": missing_loci_value,
+                         "closest_external_profile_id" : matching_ST,
+                         "closest_external_profile_distance" : min_value,
+                         "duplicated_allels_value" : duplicated_loci_value,
+                         "profile_allel_list" : list_to_dump,
+                         "comment" : "In local database"}
+
+            with open('cgMLST_part1.json', "w") as f:
+                f.write(json.dumps(json_dict))
 
         else:
             # new allelic profile not present in either external or local databases
@@ -946,7 +1050,7 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
                         last_ST = line[0].split('_')[1]
         
         
-            novel_profile_ST = f'local_{int(last_ST)+1}'
+            novel_profile_ST = f'local_{int(last_ST) + 1}'
             
             write_novel_sample(f'{novel_profile_ST}\\t{sample_profile}\\n', f'{sciezka}/local/profiles_local.list')
         
@@ -955,6 +1059,18 @@ with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_
 
             f2.write(f'ST\\t{all_loci_names}\\n')
             f2.write(f'{novel_profile_ST}\\t{sample_profile}\\n')
+            json_dict = {"scheme_name" : "cgMLST",
+                         "status" : "tak",
+                         "profile_id" : novel_profile_ST,
+                         "missing_allels_value": missing_loci_value,
+                         "closest_external_profile_id" : matching_ST,
+                         "closest_external_profile_distance" : min_value,
+                         "duplicated_allels_value" : duplicated_loci_value,
+                         "profile_allel_list" : list_to_dump,
+                         "comment" : "Novel in local database"}
+
+            with open('cgMLST_part1.json', "w") as f:
+                f.write(json.dumps(json_dict))
 
 """
 }
@@ -1374,8 +1490,9 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
         f1.write(f'ST\\tComment\\n')
         f1.write(f'unk\\tUnknown species: {species}\\n')
 
-
+   
     # json na zle QC
+    # json przerzucony jest do modulu extract_historical_data
     sys.exit(0)
 
 time.sleep(np.random.randint(2,20))
@@ -1417,6 +1534,7 @@ else:
         f.write('Provided genus: {genus} is not part of the Enterobase')
     sys.exit(0)
     # json for wrong species
+    # json przerzucony jest do modulu extract_historical_data
 
 with open('parsed_phiercc_enterobase.txt', 'w') as f:
     f.write(phiercc_header)
@@ -1471,6 +1589,7 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
 
 
     # json na zle QC
+    # json przerzucony jest do modulu extract_historical_data
     sys.exit(0)
 
 
@@ -1493,6 +1612,7 @@ if species != "jejuni":
 
 
     # json na zly gatunek
+    # json przerzucony jest do modulu extract_historical_data
     sys.exit(0)
 
 ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
@@ -1533,7 +1653,8 @@ process run_pHierCC_local {
   input:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS),  val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt')
+  tuple val(x), path('parsed_phiercc_minimum_spanning_tree.txt'), path('parsed_phiercc_maximum_spanning_tree.txt'), emit: to_pubdir
+  tuple val(x), path('cgMLST_json_phiercc_local.json'), emit: json
   // when:
   // GENUS == 'Salmonella' || GENUS == 'Escherichia' || SPECIES == 'jejuni'
   script:
@@ -1543,6 +1664,7 @@ import  sys
 import gzip
 import re
 import numpy as np
+import json
 
 species="$SPECIES"
 genus="$GENUS"
@@ -1558,6 +1680,10 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
         f2.write(f'unk\\tUnknownn species: {species}')
 
     # json na zle QC
+    # results of this module provide only one field to bigger cgMLST data, thus this is just dummy json so that nextflow wont crash
+    json_dict = {"dummy" : "dummy"}
+    with open('cgMLST_json_phiercc_local.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0)
 
 
@@ -1593,6 +1719,9 @@ else:
         f1.write('Provided species: {species} is not part of any cgMLST scheme')
         f2.write('Provided species: {species} is not part of any cgMLST scheme')
         # json na zly gatunek
+        json_dict = {"dummy" : "dummy"}
+        with open('cgMLST_json_phiercc_local.json', "w") as f:
+            f.write(json.dumps(json_dict)) 
         sys.exit(0)
 
 # 1. Szukanie w wynikach mojego klastrowania z uzyciem single linkage
@@ -1633,7 +1762,15 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f, gzip.open(f'{di
             f.write(f'{ST_sample}\\t{formatted_string}\\n')
             # nie ma potrzeby dalszego ogladania pliku
             break
-
+    # json
+    list_to_dump = []
+    # header ma slowo ST w nazwie ktore omijamu
+    for level_name, level_value in zip(phiercc_header.split("\\t")[1:], lista_poziomow):
+        list_to_dump.append({level_name:level_value})
+    with open('cgMLST_json_phiercc_local.json', "w") as f:
+        to_dump = {"hiercc_clustering_internal_data": list_to_dump}
+        f.write(json.dumps(to_dump))    
+ 
 # 2. Szukanie pHierCC w wynikach  maximum spanning tree
 with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f, gzip.open(f'{directory}/profile_complete_linkage.HierCC.gz') as f2, open(f'{directory}/profile_complete_linkage.HierCC.index') as f3:
     f.write(phiercc_header)
@@ -1683,7 +1820,8 @@ process extract_historical_data_enterobase {
   input:
   tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES), val(GENUS),  val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+  tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations), emit: to_pubdir
+  tuple val(x), path('enterobase.json'), emit: json
   // when:
   // GENUS == 'Salmonella' || GENUS == 'Escherichia'
   script:
@@ -1692,6 +1830,8 @@ process extract_historical_data_enterobase {
 import numpy as np
 import sys
 import re 
+import json
+
 species="${SPECIES}"
 genus="$GENUS"
 
@@ -1704,6 +1844,9 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
         f1.write(f'unk\\tUnknown species: {species}\\n')
 
     # json na zle QC
+    json_dict = {"dummy" : "dummy"}
+    with open('enterobase.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0)
 
 if genus != 'Salmonella' and genus != 'Escherichia':
@@ -1712,6 +1855,9 @@ if genus != 'Salmonella' and genus != 'Escherichia':
         f1.write(f'unk\\tUnknown species: {species}\\n')
 
     # json na zle QC 
+    json_dict = {"dummy" : "dummy"}
+    with open('enterobase.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0)
 
 def get_hiercc_level(my_file):
@@ -1772,6 +1918,18 @@ with open('enterobase_historical_data.txt', 'w') as f:
             f.write(f'{klucz}\\tUnited States of America\\t{wartosc[1]}\\t{wartosc[2]}\\n')
         else:
             f.write(f'{klucz}\\t{wartosc[0]}\\t{wartosc[1]}\\t{wartosc[2]}\\n')
+
+# tworzymy jsona z polami dla hiercc_clustering_external_data i hiercc_historical_data
+list_withphiercc_to_dump = []
+with open('parsed_phiercc_enterobase.txt') as f1, open('enterobase.json', 'w') as f2:
+    naglowek, wartosci = f1.readlines()
+    for level_name, level_value in zip(naglowek.split("\\t")[1:], wartosci.split("\\t")[1:]):
+        list_withphiercc_to_dump.append({level_name : level_value})
+
+    to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
+               "hiercc_historical_level" : phiercc_level_userdefined,
+               "hiercc_historicaldata_path" :  "pipeline_wyniki/${x}/enterobase_historical_data.txt"}
+    f2.write(json.dumps(to_dump))
 """
 }
 
@@ -1818,7 +1976,8 @@ process extract_historical_data_pubmlst {
   input:
   tuple val(x), path('parsed_phiercc_pubmlst.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+  tuple val(x), path('pubmlst_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations), emit: to_plot
+  tuple val(x), path('pubmlst.json'), emit: json
   // when:
   // SPECIES == 'jejuni'
 
@@ -1828,6 +1987,8 @@ process extract_historical_data_pubmlst {
 import numpy as np
 import sys
 import re
+import json
+
 species="${SPECIES}"
 
 qc_status="$QC_status"
@@ -1839,6 +2000,9 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
         f1.write(f'unk\\tUnknown species: {species}\\n')
 
     # json na zle QC
+    json_dict = {"dummy" : "dummy"}
+    with open('pubmlst.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0)
 
 if species != 'jejuni':
@@ -1847,6 +2011,9 @@ if species != 'jejuni':
         f1.write(f'unk\\tUnknown species: {species}\\n')
 
     # json na zle QC
+    json_dict = {"dummy" : "dummy"}
+    with open('pubmlst.json', "w") as f:
+        f.write(json.dumps(json_dict))
     sys.exit(0)
 
 
@@ -1895,6 +2062,17 @@ with open('pubmlst_historical_data.txt', 'w') as f:
             f.write(f'{klucz}\\tUnited Kingdom\\t{wartosc[1]}\\t{wartosc[2]}\\n')
         else:
             f.write(f'{klucz}\\t{wartosc[0]}\\t{wartosc[1]}\\t{wartosc[2]}\\n')
+
+list_withphiercc_to_dump = []
+with open('parsed_phiercc_pubmlst.txt') as f1, open('pubmlst.json', 'w') as f2:
+    naglowek, wartosci = f1.readlines()
+    for level_name, level_value in zip(naglowek.split("\\t")[1:], wartosci.split("\\t")[1:]):
+        list_withphiercc_to_dump.append({level_name : level_value})
+
+    to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
+               "hiercc_historical_level" : phiercc_level_userdefined,
+               "hiercc_historicaldata_path" :  "pipeline_wyniki/${x}/pubmlst_historical_data.txt"}
+    f2.write(json.dumps(to_dump))
 """
 }
 
@@ -2176,6 +2354,21 @@ else
   fi
 fi
 """
+}
+
+process run_cgMLST_final_json {
+  // Proces aggreguje wszystkie moduly zwiazane do wygenerowania json zgodnego z zakladka mlst_data z dokumentacji
+  container  = params.main_image
+  tag "generate final cgMLST json for sample $x"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "cgMLST.json"
+  input:
+  tuple val(x), path(cgMLST_initial), path(cgMLST_phiercc_local), path(cgMLST_phiercc_enterobase), path(cgMLST_phiercc_pubmlst)
+  output:
+  tuple val(x), path('cgMLST_full.json'), emit: json
+  script:
+  """
+  touch cgMLST_full.json
+  """
 }
 
 // FUNKCJE DODANE DLA ANALIZY NANOPORE //
@@ -2880,18 +3073,24 @@ parse_7MLST(MLST_out)
 
 
 cgMLST_out = run_cgMLST(final_assembly_with_species)
-(parse_cgMLST_out, parse_cgMLST_only_output) = parse_cgMLST(cgMLST_out)
-run_pHierCC_local(parse_cgMLST_out)
+(parse_cgMLST_out, parse_cgMLST_only_duplicates, parse_cgMLST_only_json) = parse_cgMLST(cgMLST_out)
+(run_pHierCC_local_pubdir, run_pHierCC_local_json) = run_pHierCC_local(parse_cgMLST_out)
 
 run_pHierCC_enterobase_out = run_pHierCC_enterobase(parse_cgMLST_out) // for Salmo and Escher
 run_pHierCC_enterobase_out_pubmlst = run_pHierCC_pubmlst(parse_cgMLST_out) // only for jejuni
 
-extract_historical_data_enterobase_out = extract_historical_data_enterobase(run_pHierCC_enterobase_out)
-plot_historical_data_enterobase(extract_historical_data_enterobase_out)
+(extract_historical_data_enterobase_toplot, extract_historical_data_enterobase_json)  = extract_historical_data_enterobase(run_pHierCC_enterobase_out)
+plot_historical_data_enterobase(extract_historical_data_enterobase_toplot)
 
 
-extract_historical_data_pubmlst_out = extract_historical_data_pubmlst(run_pHierCC_enterobase_out_pubmlst)
-plot_historical_data_pubmlst(extract_historical_data_pubmlst_out)
+(extract_historical_data_pubmlst_toplot, extract_historical_data_pubmlst_json) = extract_historical_data_pubmlst(run_pHierCC_enterobase_out_pubmlst)
+plot_historical_data_pubmlst(extract_historical_data_pubmlst_toplot)
+
+// // Combining some modules to produce final json output
+ 
+cgMLST_path_to_json = parse_cgMLST_only_json.join(run_pHierCC_local_json.join(extract_historical_data_enterobase_json.join(extract_historical_data_pubmlst_json,  by : 0),  by : 0),  by : 0)
+run_cgMLST_final_json(cgMLST_path_to_json)
+
 
 // AMR predictions
 run_resfinder(final_assembly_with_species)

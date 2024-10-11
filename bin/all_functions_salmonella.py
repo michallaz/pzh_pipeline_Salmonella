@@ -3,16 +3,17 @@ import re
 from Bio import SeqIO
 import gzip
 import numpy as np
+import json
 
 
 def create_profile(profile_file):
     """
     funkcja do tworzenia slownika ST na podstawie pliku profile sciagnietego z repozytorium enterobase
     :param profile_file: String do pliku profiles, rozne profile (7MLST, cgMLSDT, wgMLST) zawiera rozna liczbe kolumn,
-    piwerwsza kolumna to ST, koejne kolumny to informacja jaki wariant w danym miejscu genomu wystepuje (w postaci liczby),
-    jesli danego wariantu w danym ST nie ma jest "-".  Pierwszy wiersz to naglowki
-    :return: slownik slownikow, jako nadrzedny klucz jest sequence type, kazdemu sequence type odpowiada slownik zbudowany
-    z kluczy (nazwy genow z pierwszego naglowka), i jedna wartosc (numerek z pliku)
+    piwerwsza kolumna to ST, koejne kolumny to informacja jaki wariant w danym miejscu genomu wystepuje (w postaci
+     liczby), jesli danego wariantu w danym ST nie ma jest "-".  Pierwszy wiersz to naglowki
+    :return: slownik slownikow, jako nadrzedny klucz jest sequence type, kazdemu sequence type odpowiada slownik
+     zbudowany z kluczy (nazwy genow z pierwszego naglowka), i jedna wartosc (numerek z pliku)
     """
     slownik_profili = {}
     if not os.path.isfile(profile_file):
@@ -22,14 +23,15 @@ def create_profile(profile_file):
             for line in f:
                 if re.search('ST', line):
                     # jestesmy w wierszy naglowkowym tworzymy liste nazw, ktora posluzy jako klucze w slowniku
-                    lista_kluczy=line.rsplit()[1:] # ST nie jest kluczem
+                    lista_kluczy = line.rsplit()[1:]  # ST nie jest kluczem
                 else:
                     elementy = line.rsplit()
                     # tworzymy slownik dla danego ST
                     slownik_profili[elementy[0]] = {}
-                    for indeks,wartosc in enumerate(elementy[1:]):
+                    for indeks, wartosc in enumerate(elementy[1:]):
                         slownik_profili[elementy[0]][lista_kluczy[indeks]] = int(wartosc)
     return slownik_profili, lista_kluczy
+
 
 def getST(MLSTout, profile_file):
     """
@@ -47,17 +49,15 @@ def getST(MLSTout, profile_file):
     lista_kluczy_string - lista zawierajace nazwy loci w danym schemacie w postaci tab separated string
     """
 
-    #pierwszy przelot potrzebujemy listy kluczy/alleli w danym profilu
+    # pierwszy przelot potrzebujemy listy kluczy/alleli w danym profilu
     with open(profile_file) as f:
         for line in f:
             if re.search('ST', line):
                 # jestesmy w wierszy naglowkowym tworzymy liste nazw, ktora posluzy jako klucze w slowniku
-                lista_kluczy=line.rsplit()[1:] # ST nie jest kluczem
+                lista_kluczy = line.rsplit()[1:]  # ST nie jest kluczem
                 break
 
-
-    slownik_roznic = {} #slownik ktory jako klucze ma nazwe profilu, jako wartosc ilosc roznic do "naszej" probki
-
+    slownik_roznic = {}  # slownik ktory jako klucze ma nazwe profilu, jako wartosc ilosc roznic do "naszej" probki
 
     # Tworzymy profill alleliczny probki w kolejnosci loci identycznej jak w pliku z baza alleli
     # W przypadku braku danego locus-a dajemy -1
@@ -70,10 +70,10 @@ def getST(MLSTout, profile_file):
 
     # inicjalizacja zmiennych
     minimalna_roznica = 3200
-    slownik_roznic['local_0'] = minimalna_roznica # inicjujemy slownik dummy wartoscia
+    slownik_roznic['local_0'] = minimalna_roznica  # inicjujemy slownik dummy wartoscia
     allele_string_lowest_difference = ''
-    lista_probki_string = "\t".join(list(map(str,lista_probki)))
-    lista_kluczy_string = "\t".join(list(map(str,lista_kluczy)))
+    lista_probki_string = "\t".join(list(map(str, lista_probki)))
+    lista_kluczy_string = "\t".join(list(map(str, lista_kluczy)))
 
     # iterujemy po pliku z profilami, tym razem liczymy odleglosc miedzy znanymi profilami allelicznymi
     # a profilem probki, przerywamy iteracje po pliku przy znalezieniu profilu z odlegloscia 0
@@ -85,8 +85,8 @@ def getST(MLSTout, profile_file):
             else:
                 elementy = line.rsplit()
                 # wyciagamy ST  z profilu i allele
-                ST_dict = elementy[0] # ST w pliku z profilami
-                lista_ST = list(map(int,elementy[1:])) # profil alleliczny
+                ST_dict = elementy[0]  # ST w pliku z profilami
+                lista_ST = list(map(int, elementy[1:]))  # profil alleliczny
                 slownik_roznic[ST_dict] = 3200
 
                 slownik_roznic[ST_dict] = calculate_phiercc_distance(lista_probki, lista_ST)
@@ -101,11 +101,12 @@ def getST(MLSTout, profile_file):
 
     try:
         ST = np.min([int(x) for x, y in slownik_roznic.items() if y == minimalna_roznica])
-    except:
+    except ValueError:
         # obejscie jesli analizujemy baze local gdzie  ST maja postac f'local_{numer}'
         ST = np.min([int(x.split('_')[1]) for x, y in slownik_roznic.items() if y == minimalna_roznica])
         ST = f'local_{ST}'
     return str(ST), minimalna_roznica, allele_string_lowest_difference, lista_probki_string, lista_kluczy_string
+
 
 def write_novel_sample(profile, output_file):
     """
@@ -118,7 +119,7 @@ def write_novel_sample(profile, output_file):
         with open(output_file, 'a') as f:
             f.write(f'{profile}')
     else:
-        raise(f'Provided file {output_file} does not exist')
+        raise f'Provided file {output_file} does not exist'
 
 
 def calculate_phiercc_distance(wektor_x, wektor_y, allowed_missing=0.05):
@@ -134,8 +135,7 @@ def calculate_phiercc_distance(wektor_x, wektor_y, allowed_missing=0.05):
     wektor_y = np.array(wektor_y)
     n_loci = len(wektor_y)
     if len(wektor_y) != len(wektor_y):
-        raise('Provided profiles have different lengths')
-
+        raise 'Provided profiles have different lengths'
 
     rl, ad, al = 0., 1e-4, 1e-4
 
@@ -165,7 +165,7 @@ def calculate_phiercc_distance(wektor_x, wektor_y, allowed_missing=0.05):
 
 
 
-def parse_MLST_tsv(file_path, long = True, sep = "\t"):
+def parse_MLST_tsv(file_path, long=True, sep="\t"):
     """
     Funkcja do tworzenia slownika MLST na podstawie dwulinijkowego pliku, w ktorym naglowek ma klucze (odpowiadajace
     allelom) a drugiw wiersz to odzzielony ("\t", ";", " ", ",") identyfikator allelu
@@ -179,7 +179,7 @@ def parse_MLST_tsv(file_path, long = True, sep = "\t"):
         zakres = 2
     else:
         zakres = 1
-    slownik_alleli= {}
+    slownik_alleli = {}
     with open(file_path, 'r') as f:
         for line in f:
             if re.search('ST', line):
@@ -192,6 +192,7 @@ def parse_MLST_tsv(file_path, long = True, sep = "\t"):
                     slownik_alleli[klucze[indeks]] = wartosc
 
     return slownik_alleli
+
 
 def parse_MLST_fasta(file_path):
     """
@@ -211,6 +212,7 @@ def parse_MLST_fasta(file_path):
             slownik_alleli[record.description.split(' ')[0]] = -1
 
     return slownik_alleli
+
 
 def _parse_MLST_blastn(plik):
     """
@@ -233,7 +235,7 @@ def _parse_MLST_blastn(plik):
                     slownik_profili[line[0]] = -1
             except ValueError:
                 slownik_profili[line[0]] = -1
-    return(slownik_profili)
+    return slownik_profili
 
 
 def parse_MLST_blastn(plik):
@@ -254,13 +256,15 @@ def parse_MLST_blastn(plik):
                 slownik_profili[line[0]] = int(line[1])
             except ValueError:
                 slownik_profili[line[0]] = -1
-    return(slownik_profili)
+    return slownik_profili
 
-def compare_2_allel_dict(slownik1, slownik2, file_prefix = 'out'):
+
+def compare_2_allel_dict(slownik1, slownik2, file_prefix='out'):
     """
     Funkcja do porownywania dwoch slownikow alleli w celu okreslenia ich zgodnosci. Funkcja zwraca ilosc kluczy, ktore
     w obu slownikach przyjmuja takie same wartosci. Ponadtow dw a pliki z unikalnymi kluczami dla obu
-    slownikow rowniez zapisywane sa do pliko {file_prefix}_slownik1_uniquekeys.txt i {file_prefix}_slownik2_uniquekeys.txt
+    slownikow rowniez zapisywane sa do pliko {file_prefix}_slownik1_uniquekeys.txt
+    i {file_prefix}_slownik2_uniquekeys.txt
 
     :param slownik1: slownik
     :param slownik2: slownik, o kluczach identycznych z tymi w slowniku 1
@@ -269,7 +273,7 @@ def compare_2_allel_dict(slownik1, slownik2, file_prefix = 'out'):
     Pliki majaca nazwe {file_prefix}_commoncalue_keys.txt, {file_prefix)_differentvalue_keys.txt
     :return: int, liczba kluczy o zgodnych wartosciach miwedzy slownikami, ponadtwo tworzone sa 2 pliki
     """
-    #zrobimy ta petla
+    # zrobimy ta petla
     common_keys = 0
     with open(f"{file_prefix}_commoncalue_keys.txt", 'w') as f1, open(f"{file_prefix}_differentvalue_keys.txt", 'w') as f2:
         for allel in slownik1:
@@ -280,7 +284,7 @@ def compare_2_allel_dict(slownik1, slownik2, file_prefix = 'out'):
                 else:
                     f2.write(f"{allel}\t{slownik1[allel]}\t{slownik2[allel]}\n")
             else:
-                #print(f"Allel {allel} nie wystepuje w drugim slowniku !\n")
+                # print(f"Allel {allel} nie wystepuje w drugim slowniku !\n")
                 pass
     # na koniec wyrzumy jeszcze do plikow unikalne klucze dla slownikow 1 i 2
     slownik1_keys = set(slownik1.keys())
@@ -291,6 +295,7 @@ def compare_2_allel_dict(slownik1, slownik2, file_prefix = 'out'):
         f2.write("\n".join(slownik2_keys - slownik1_keys))
 
     return common_keys
+
 
 def sort_profile(profile_file, sorted_keys_file):
     """
@@ -319,9 +324,8 @@ def sort_profile(profile_file, sorted_keys_file):
                 for indeks, wartosc in enumerate(elementy):
                     slownik_alleli[klucze[indeks]] = wartosc
 
-
     with open(out_name, 'w') as f:
-        out_msg = '800000' #dummy identyfikator ?
+        out_msg = '800000'  # dummy identyfikator ?
         for klucz in sorted_keys:
             try:
                 slownik_alleli[klucz]
@@ -329,11 +333,11 @@ def sort_profile(profile_file, sorted_keys_file):
                 slownik_alleli[klucz] = '-1'
             out_msg = out_msg + '\t' + slownik_alleli[klucz]
 
-
         f.write("ST" + "\t" + "\t".join(sorted_keys) + "\n")
         f.write(out_msg + "\n")
 
     return True
+
 
 if __name__ == '__main__':
     pass
