@@ -803,10 +803,12 @@ process run_resfinder {
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/ResFinder_results_table.txt"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/pheno_table_*.txt"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/PointFinder_results.txt"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "resfinder/resfinder.json"
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('resfinder/pheno_table*.txt'), path('resfinder/ResFinder_results_table.txt'), path('resfinder/PointFinder_results.txt')
+  tuple val(x), path('resfinder/pheno_table*.txt'), path('resfinder/ResFinder_results_table.txt'), path('resfinder/PointFinder_results.txt'), emit: to_pubdir
+  tuple val(x), path('resfinder.json'), emit: json
   // when:
   // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
@@ -837,14 +839,20 @@ process run_resfinder {
     touch pheno_table_1.txt
     touch ResFinder_results_table.txt
     touch PointFinder_results.txt
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output" 
+    python /opt/docker/EToKi/externals/resfinder_parser.py  -i  ResFinder_results_tab.txt -j PointFinder_results.txt -s "nie" -r "\${ERR_MSG}" -o resfinder.json
+    cp resfinder.json ../
   else
 
     if [[ "${GENUS}" == *"Salmo"* ]]; then
         python -m resfinder -o resfinder/ -s 'senterica'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+        python /opt/docker/EToKi/externals/resfinder_parser.py  -i  resfinder/ResFinder_results_tab.txt -j resfinder/PointFinder_results.txt -s "tak" -o resfinder.json
     elif [[ "${GENUS}" == *"Escher"* ]]; then
         python -m resfinder -o resfinder/ -s 'ecoli'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+        python /opt/docker/EToKi/externals/resfinder_parser.py  -i  resfinder/ResFinder_results_tab.txt -j resfinder/PointFinder_results.txt -s "tak" -o resfinder.json
     elif [ ${GENUS} == "Campylobacter" ]; then
          python -m resfinder -o resfinder/ -s 'cjejuni'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
+         python /opt/docker/EToKi/externals/resfinder_parser.py  -i  resfinder/ResFinder_results_tab.txt -j resfinder/PointFinder_results.txt -s "tak" -o resfinder.json
     else
       # Tworzenie json i dummy output
       mkdir resfinder
@@ -852,6 +860,9 @@ process run_resfinder {
       touch pheno_table_1.txt
       touch ResFinder_results_table.txt
       touch PointFinder_results.txt
+      ERR_MSG="This module was eneterd with wrong genus: ${GENUS} and poduced no valid output"
+      python /opt/docker/EToKi/externals/resfinder_parser.py  -i  ResFinder_results_tab.txt -j PointFinder_results.txt -s "nie" -r "\${ERR_MSG}" -o resfinder.json
+      cp resfinder.json ../
     fi # koniec if-a na gatunek przy zdanym QC 
  
  fi # koniec if-a na status QC przekazany modulowi
@@ -1766,7 +1777,7 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f, gzip.open(f'{di
     list_to_dump = []
     # header ma slowo ST w nazwie ktore omijamu
     for level_name, level_value in zip(phiercc_header.split("\\t")[1:], lista_poziomow):
-        list_to_dump.append({level_name:level_value})
+        list_to_dump.append({level_name.rstrip():level_value.rstrip()})
     with open('cgMLST_json_phiercc_local.json', "w") as f:
         to_dump = {"hiercc_clustering_internal_data": list_to_dump}
         f.write(json.dumps(to_dump))    
@@ -1924,7 +1935,7 @@ list_withphiercc_to_dump = []
 with open('parsed_phiercc_enterobase.txt') as f1, open('enterobase.json', 'w') as f2:
     naglowek, wartosci = f1.readlines()
     for level_name, level_value in zip(naglowek.split("\\t")[1:], wartosci.split("\\t")[1:]):
-        list_withphiercc_to_dump.append({level_name : level_value})
+        list_withphiercc_to_dump.append({level_name.rstrip() : level_value.rstrip()})
 
     to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
                "hiercc_historical_level" : phiercc_level_userdefined,
@@ -2067,7 +2078,7 @@ list_withphiercc_to_dump = []
 with open('parsed_phiercc_pubmlst.txt') as f1, open('pubmlst.json', 'w') as f2:
     naglowek, wartosci = f1.readlines()
     for level_name, level_value in zip(naglowek.split("\\t")[1:], wartosci.split("\\t")[1:]):
-        list_withphiercc_to_dump.append({level_name : level_value})
+        list_withphiercc_to_dump.append({level_name.rstrip() : level_value.rstrip()})
 
     to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
                "hiercc_historical_level" : phiercc_level_userdefined,
@@ -2360,14 +2371,40 @@ process run_cgMLST_final_json {
   // Proces aggreguje wszystkie moduly zwiazane do wygenerowania json zgodnego z zakladka mlst_data z dokumentacji
   container  = params.main_image
   tag "generate final cgMLST json for sample $x"
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "cgMLST.json"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "cgMLST_full.json"
   input:
-  tuple val(x), path(cgMLST_initial), path(cgMLST_phiercc_local), path(cgMLST_phiercc_enterobase), path(cgMLST_phiercc_pubmlst)
+  tuple val(x), path('cgMLST_initial.json'), path('cgMLST_phiercc_local.json'), path('cgMLST_phiercc_enterobase.json'), path('cgMLST_phiercc_pubmlst.json')
   output:
   tuple val(x), path('cgMLST_full.json'), emit: json
   script:
   """
-  touch cgMLST_full.json
+#!/usr/bin/python
+import  sys
+import re
+import json
+
+initial_json = json.load(open('cgMLST_initial.json'))
+phiercc_local = json.load(open('cgMLST_phiercc_local.json'))
+phiercc_enterobase = json.load(open('cgMLST_phiercc_enterobase.json'))
+phiercc_pubmlst = json.load(open('cgMLST_phiercc_pubmlst.json'))
+
+if "error_message" in initial_json.keys():
+    # moduly do cgMLSST weszly z errorem wiec jedyne co robie to kopiuje plik 
+    with open('cgMLST_full.json', 'w') as f:
+        f.write(json.dumps(initial_json))
+    sys.exit(0)
+else:
+    to_dump = initial_json
+    # dodajemy wyniki kolejnych modulow, jesli maja one klucz dummy to takiego json nie dodaje
+    if "dummy" not in phiercc_local.keys():
+        to_dump = {**to_dump, **phiercc_local}
+    if "dummy" not in phiercc_enterobase.keys():
+        to_dump = {**to_dump, **phiercc_enterobase}
+    if "dummy" not in phiercc_pubmlst.keys():
+        to_dump = {**to_dump, **phiercc_pubmlst}
+    with open('cgMLST_full.json', 'w') as f:
+        f.write(json.dumps(to_dump))
+    sys.exit(0)
   """
 }
 
