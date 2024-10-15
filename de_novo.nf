@@ -96,7 +96,7 @@ process run_fastqc_illumina {
   tuple val(x), path(reads), val(QC_STATUS)
   output:
   tuple val(x), path("*csv"), emit: publishdir // Wykresy, kopiujemy bo json wskazuje do publishdir
-  tuple val(x), path("*json"), emit: json // Sam json do kopiowania w celu zlozenia "ostatecznego jsona"
+  tuple val(x), path("forward.json"),  path("reverse.json"), emit: json // Sam json do kopiowania w celu zlozenia "ostatecznego jsona"
   tuple val(x), env(QC_STATUS_EXIT), emit: qcstatus // Sam QC status
   tuple val(x), env(QC_STATUS_EXIT), env(TOTAL_BASES), emit: qcstatus_and_values // QC status + informccje o calkowitej liczbie zasad i ilosci odczytow
   script:
@@ -142,7 +142,7 @@ process run_fastqc_nanopore {
   tuple val(x), path(reads), val(QC_STATUS)
   output:
   tuple val(x), path("*csv"), emit: publishdir
-  tuple val(x), path("*json"), emit: json
+  tuple val(x), path("forward.json"), emit: json
   tuple val(x), env(QC_STATUS_EXIT), emit: qcstatus
   tuple val(x), env(QC_STATUS_EXIT), env(TOTAL_BASES), emit: qcstatus_and_values
 
@@ -522,8 +522,8 @@ process parse_7MLST {
   input:
   tuple val(x), path('MLSTout.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations) 
   output:
-  tuple val(x), path('MLST_parsed_output.txt'), path('MLST_sample_full_list_of_allels.txt'), path('MLST_closest_ST_full_list_of_allels.txt')
-  tuple val(x), path('MLST.json')
+  tuple val(x), path('MLST_parsed_output.txt'), path('MLST_sample_full_list_of_allels.txt'), path('MLST_closest_ST_full_list_of_allels.txt'), emit: to_pubdir
+  tuple val(x), path('MLST.json'), emit: json
   // when:
   // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
@@ -2472,6 +2472,20 @@ else:
   """
 }
 
+process merge_all_subjsons_illumina {
+  container  = params.main_image
+  tag "Merging all subjsons for sample $x"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "${x}_mlst.json"
+  input:
+  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("reverse.json"), path("contaminations.json"), path("initial_MLST.json"), path("bacterial_genome.json")
+  output:
+  path("${x}_mlst.json")
+  script:
+  """
+  touch ${x}_mlst.json
+  """
+
+}
 // FUNKCJE DODANE DLA ANALIZY NANOPORE //
 
 process run_initial_mlst_nanopore {
@@ -2902,6 +2916,22 @@ fi
 """
 }
 
+
+process merge_all_subjsons_nanopore {
+  container  = params.main_image
+  tag "Merging all subjsons for sample $x"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "${x}_mlst.json"
+  input:
+  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("contaminations.json"), path("initial_MLST.json"), path("bacterial_genome.json")
+  output:
+  path("${x}_mlst.json")
+  script:
+  """
+  touch ${x}_mlst.json
+  """
+
+}
+
 // SUB WORKFLOWS NANOPORE //
 
 workflow predict_species_nanopore {
@@ -2923,7 +2953,7 @@ final_species = get_species_nanopore(programs_out)
 emit:
 final_species.species_and_qcstatus
 final_species.genus_only
-
+final_species.json
 }
 
 workflow polishing_with_medaka {
@@ -3094,6 +3124,7 @@ final_species = get_species_illumina(programs_out)
 emit:
 final_species.species_and_qcstatus
 final_species.genus_only
+final_species.json
 }
 
 // MAIN WORKFLOW //
@@ -3111,7 +3142,7 @@ Channel
 run_fastqc_illumina_out = run_fastqc_illumina(initial_fastq)
 
 // Species prediction
-(predict_species_out, predict_species_genus) = predict_species_illumina(initial_fastq, run_fastqc_illumina_out.qcstatus_and_values)
+(predict_species_out, predict_species_genus, predict_species_json) = predict_species_illumina(initial_fastq, run_fastqc_illumina_out.qcstatus_and_values)
 
 
 //Inilat MLST
@@ -3144,7 +3175,7 @@ Channel
 run_fastqc_nanopore_out = run_fastqc_nanopore(initial_fastq)
 
 // Contaminations/subspecies prediction
-(predict_species_out, predict_species_genus) = predict_species_nanopore(initial_fastq, run_fastqc_nanopore_out.qcstatus_and_values)
+(predict_species_out, predict_species_genus, predict_species_json) = predict_species_nanopore(initial_fastq, run_fastqc_nanopore_out.qcstatus_and_values)
 
 //Initial MLST
 initial_mlst_out = run_initial_mlst_nanopore(initial_fastq.join(predict_species_out, by : 0)) // initial_mlst_out  przekazuje zarowno fastq jak i qc_status
@@ -3170,7 +3201,7 @@ initial_scaffold = run_flye(processed_fastq)
 // Species prediction with Achtman and core genome shemes
 final_assembly_with_species = extract_final_stats_genome.join(predict_species_out, by : 0)
 MLST_out = run_7MLST(final_assembly_with_species)
-parse_7MLST(MLST_out)
+parse_7MLST_out = parse_7MLST(MLST_out)
 
 
 cgMLST_out = run_cgMLST(final_assembly_with_species)
@@ -3187,33 +3218,62 @@ plot_historical_data_enterobase(extract_historical_data_enterobase_toplot)
 (extract_historical_data_pubmlst_toplot, extract_historical_data_pubmlst_json) = extract_historical_data_pubmlst(run_pHierCC_enterobase_out_pubmlst)
 plot_historical_data_pubmlst(extract_historical_data_pubmlst_toplot)
 
-// // Combining some modules to produce final json output
+// // Combining some modules to produce final json output for cgMLST
  
 cgMLST_path_to_json = parse_cgMLST_only_json.join(run_pHierCC_local_json.join(extract_historical_data_enterobase_json.join(extract_historical_data_pubmlst_json,  by : 0),  by : 0),  by : 0)
-run_cgMLST_final_json(cgMLST_path_to_json)
+run_cgMLST_final_json_out = run_cgMLST_final_json(cgMLST_path_to_json)
 
 
 // AMR predictions
-run_resfinder(final_assembly_with_species)
-run_amrfinder(final_assembly_with_species)
+run_resfinder_out = run_resfinder(final_assembly_with_species)
+run_amrfinder_out = run_amrfinder(final_assembly_with_species)
 
 // plasmids
-run_plasmidfinder(final_assembly_with_species)
+run_plasmidfinder_out = run_plasmidfinder(final_assembly_with_species)
 
 // Virulence
 prokka_out = run_prokka(final_assembly_with_species)
-VFDB_out=run_VFDB(prokka_out)
-run_virulencefinder(final_assembly_with_species)
+run_VFDB_out = run_VFDB(prokka_out)
+parse_VFDB_ecoli_out = parse_VFDB_ecoli(run_VFDB_out.ecoli)
 
-// These three modules have "when" instructions and works only for Escher
+run_virulencefinder_out = run_virulencefinder(final_assembly_with_species)
+run_ectype_out = run_ectyper(final_assembly_with_species)
 
-run_ectyper(final_assembly_with_species)
-parse_VFDB_ecoli(VFDB_out.ecoli)
+run_spifinder_out = run_spifinder(final_assembly_with_species)
+run_seqsero_out = run_Seqsero(final_assembly_with_species)
+run_sistr_out = run_sistr(final_assembly_with_species)
 
-// These three modules have "when" instructions and works only for Salmonella
-run_spifinder(final_assembly_with_species)
-run_Seqsero(final_assembly_with_species)
-run_sistr(final_assembly_with_species)
+// Aggregate all modules that emit json 
+// Split into two channels: channnel_to_json and initial_to_json is purely to split outputs of module that are 
+// executed after genome is porposed from ones that work on fastq files
+  
+  channnel_to_json = run_sistr_out.json.join(run_seqsero_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(run_spifinder_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(run_ectype_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(run_virulencefinder_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(run_VFDB_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(run_plasmidfinder_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(run_amrfinder_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(run_resfinder_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(run_cgMLST_final_json_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(parse_7MLST_out.json, by : 0)
+  
 
-} 
+if(params.machine == 'Illumina') {
+  initial_to_json = run_fastqc_illumina_out.json.join(predict_species_json, by : 0) // predict_species_json to explicite nazwany kanal wyjscia podczas wywolania subworkflow
+  initial_to_json = initial_to_json.join(initial_mlst_out.json,  by : 0) 
+  initial_to_json = initial_to_json.join(extract_final_stats_json,  by : 0) // extract_final_stats_json to explicite nazwany kanal wyjscia podczas wywolania modulu
+  channnel_to_json = channnel_to_json.join(initial_to_json, by : 0)
+  merge_all_subjsons_illumina(channnel_to_json)
+  // modul do zapisywania merge'u jsona  
+} else if (params.machine == 'Nanopore') {
+  // Nanopore rozni sie tylko outputem kanalu fastqc 
+  initial_to_json = run_fastqc_nanopore_out.json.join(predict_species_json, by : 0) // predict_species_json to explicite nazwany kanal wyjscia podczas wywolania subworkflow
+  initial_to_json = initial_to_json.join(initial_mlst_out.json,  by : 0)
+  initial_to_json = initial_to_json.join(extract_final_stats_json,  by : 0) // extract_final_stats_json to explicite nazwany kanal wyjscia podczas wywolania modulu
+  channnel_to_json = channnel_to_json.join(initial_to_json, by : 0)
 
+  merge_all_subjsons_nanopore(channnel_to_json)
+}
+
+}
