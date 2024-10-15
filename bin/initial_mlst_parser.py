@@ -67,7 +67,7 @@ def main_program(input_file, min_number, status, output="", error=""):
             status = "nie"# status przekazywany modulow nizej
 
     with open(output, 'w') as f1:
-        f1.write(json.dumps(json_dict))
+        f1.write(json.dumps(json_dict, indent = 4))
     print(status)
     return status
 

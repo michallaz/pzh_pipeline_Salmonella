@@ -143,7 +143,7 @@ def main_program(input_file_filtered, input_file_unfiltered, max_contigs, nvalue
         json_output.append(unfiltered_json)
 
     with open(output, 'w') as f1:
-        f1.write(json.dumps(json_output))
+        f1.write(json.dumps(json_output, indent = 4))
     print(status)
     return status
 

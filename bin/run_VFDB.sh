@@ -48,16 +48,28 @@ do
 	
 	if [ ${ILE} -eq 0 ]; then
 		echo -e "Dla ${K} zapisuje ${ORG}\t${VF}\t${VFC}\t${GEN}\tBRAK"
-		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\tBRAK" >> VFDB_summary.txt
+		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\tNo_hits\tO\t0\t0\tNo_ref\tBRAK" >> VFDB_summary.txt
 	elif [ ${ILE} -eq 1 ]; then
 		NAZWA=`cat tmp | cut -f1 | head -1`
+		REF_NAME=`cat tmp | sort -rnk9 | head -1 | cut -f2 | tr "(" " " | cut -d " " -f2 | tr -d ")"`
+		SEQ_ID=`cat tmp | sort -rnk9 | head -1 | cut -f9`
+		SLEN=`cat tmp | sort -rnk9 | head -1 | cut -f8`
+		QLEN_END=`cat tmp | sort -rnk9 | head -1 | cut -f7`
+		QLEN_START=`cat tmp | sort -rnk9 | head -1 | cut -f6`
+		COV=`echo "${SLEN}/(${QLEN_END} - ${QLEN_START} + 1) * 100" | bc -l`
 		echo -e "Dla ${K} zapisuje ${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}"
-		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}" >> VFDB_summary.txt
+		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}\t${SEQ_ID}\t${COV}\t${REF_NAME}\tONE_HIT" >> VFDB_summary.txt
 
 	elif [ ${ILE} -gt 1 ]; then
-		NAZWA=`cat tmp | cut -f1 | sort | uniq | tr "\n" ","`
+		NAZWA=`cat tmp | sort -rnk9 | head -1 | cut -f1` # Zwracamy tylko najlepszy hitm jesli jest wiele hitow "ze 100 seq id" to random
+		REF_NAME=`cat tmp | sort -rnk9 | head -1 | cut -f2 | tr "(" " " | cut -d " " -f2 | tr -d ")"`
+		SEQ_ID=`cat tmp | sort -rnk9 | head -1 | cut -f9`
+                SLEN=`cat tmp | sort -rnk9 | head -1 | cut -f8`
+                QLEN_END=`cat tmp | sort -rnk9 | head -1 | cut -f7`
+                QLEN_START=`cat tmp | sort -rnk9 | head -1 | cut -f6`
+                COV=`echo "${SLEN}/(${QLEN_END} - ${QLEN_START} + 1) * 100" | bc -l`
 		echo -e "Dla ${K} zapisuje wielohitowej ${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}"
-		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}\tMULTI" >> VFDB_summary.txt
+		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}\t${SEQ_ID}\t${COV}\t${REF_NAME}\tMULTIPLE_HITS" >> VFDB_summary.txt
 	fi
 	rm blastn_tmp.tab
 	rm tmp

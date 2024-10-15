@@ -5,10 +5,8 @@ import json
 
 
 @click.command()
-@click.option('-i', '--input_file_resfinder', help='[INPUT] a path to an input file with Resfinder results',
-              type=click.Path(), default="ResFinder_results_tab.txt", required=True)
-@click.option('-j', '--input_file_pointfinder', help='[INPUT] a path to an input file with Pointfinder results',
-              type=click.Path(), default="PointFinder_results.txt", required=True)
+@click.option('-i', '--input_file', help='[INPUT] a path to an input file with AMRfinder results',
+              type=click.Path(), required=True)
 @click.option('-s', '--status', help='[INPUT] PREDEFINED status that is transferred to an output json. '
                                      'If this status was either nie or blad fastqc will not run',
               type=click.Choice(['tak', 'nie', 'blad'], case_sensitive=False),  required=True)
@@ -17,42 +15,34 @@ import json
               type=str,  required=False, default="")
 @click.option('-o', '--output', help='[Output] Name of a file with json output',
               type=str,  required=True)
-def main_program(status, input_file_resfinder, input_file_pointfinder, output, error=""):
+def main_program(status, input_file, output, error=""):
     if status != "tak":
-        json_output = {"program_name" : "ResFinder/PointFinder",
+        json_output = {"program_name" : "AMRFinderPlus",
                         "status": status,
                         "error_message": error}
     else:
-        json_output = {"program_name" : "ResFinder/PointFinder",
+        json_output = {"program_name" : "AMRFinderPlus",
                      "status": status}
         slownik = {}
-        with open(input_file_resfinder) as f:
+        with open(input_file) as f:
             for line in f:
                 line = line.split("\t")
                 line[-1] = line[-1].rstrip()
-                if "Resistance gene" == line[0]:
+                if "Protein identifier" == line[0]:
                     continue
                 else:
-                    resistance_gene, seq_identity, coverage, contig_name, antibiotic, reference_name = line[0], line[1], line[3], line[5], line[7], line[8]
-                    antibiotic_list = antibiotic.split(",")
+                    contig_name, resistance_gene, antibiotic, typ, coverage, seq_identity, reference_name = line[1], line[5], line[11], line[12], line[15], line[16], line[18]
+
+                    antibiotic_list = antibiotic.split("/")
                     for element in antibiotic_list:
                         if element not in slownik.keys():
                             slownik[element] = []
-                        slownik[element].append([resistance_gene, contig_name, seq_identity, coverage, reference_name, "gen"])
-        with open(input_file_pointfinder) as f:
-            for line in f:
-                line = line.split("\t")
-                line[-1] = line[-1].rstrip()
-                if "Mutation" == line[0]:
-                    continue
-                else:
-                    mutation,  antibiotic = line[0], line[3]
-                    antibiotic_list = antibiotic.split(",")
-                    gene_name, mutation_name = mutation.split(" ")
-                    for element in antibiotic_list:
-                        if element not in slownik.keys():
-                            slownik[element] = []
-                        slownik[element].append([gene_name, mutation_name, "mutacja_punktowa"])
+                        if typ != "POINTX":
+                            slownik[element].append([resistance_gene, contig_name, seq_identity, coverage, reference_name, "gen"])
+                        else:
+                            gene_name, mutation_name = resistance_gene.split("_")
+                            slownik[element].append([gene_name, mutation_name, "mutacja_punktowa"])
+
         # skladanie wlasciwego jsona
         json_output["program_data"] = []
         for antibiotic, czynniki in slownik.items():

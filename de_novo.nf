@@ -685,15 +685,17 @@ with open('MLST_parsed_output.txt', 'w') as f1, open('MLST_sample_full_list_of_a
 
 process run_Seqsero {
   // SeqSero only works for Salmonella
-  container  = 'salmonella_illumina:2.0'
+  container  =  params.main_image
   tag "Predicting OH for sample $x with Seqsero"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "seqsero.json"
   cpus params.cpus
   maxForks 15
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('seqsero/SeqSero_result.txt')
+  tuple val(x), path('seqsero/SeqSero_result.txt'), emit: to_pubdir
+  tuple val(x), path('seqsero.json'), emit: json
   // when:
   // GENUS == 'Salmonella'
   script:
@@ -705,13 +707,20 @@ process run_Seqsero {
   if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
     mkdir seqsero
     touch seqsero/SeqSero_result.txt
+    touch SeqSero_result.tsv
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    python /opt/docker/EToKi/externals/seqsero_parser.py  -i SeqSero_result.tsv -s "nie" -r "\${ERR_MSG}" -o seqsero.json    
     #json na zle QC
   else
     if [ ${GENUS} == "Salmonella" ]; then
       python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p 4 -i $fasta -d seqsero
+      python /opt/docker/EToKi/externals/seqsero_parser.py  -i seqsero/SeqSero_result.tsv -s "tak" -o seqsero.json
     else
       mkdir seqsero
       touch seqsero/SeqSero_result.txt
+      ERR_MSG="This module works only with Salmonella"
+      touch SeqSero_result.tsv
+      python /opt/docker/EToKi/externals/sistr_parser.py  -i SeqSero_result.tsv -s "nie" -r "\${ERR_MSG}" -o seqsero.json    
       #json na zly gatunek
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC
@@ -720,15 +729,17 @@ process run_Seqsero {
 
 process run_sistr {
   // Sistr works only for Salmonella
-  container  = 'salmonella_illumina:2.0'
+  container  =  params.main_image
   tag "Predicting OH for sample $x with Sistr"
   publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "sistr.json"
   cpus params.cpus
   maxForks 15
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('sistr-output.tab')
+  tuple val(x), path('sistr-output.tab'), emit: to_pubdir
+  tuple val(x), path('sistr.json'), emit: json
   // when:
   // GENUS == 'Salmonella'
   script:
@@ -748,12 +759,17 @@ process run_sistr {
  if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
     # json na zle QC
     touch sistr-output.tab
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    python /opt/docker/EToKi/externals/sistr_parser.py  -i sistr-output.tab -s "nie" -r "\${ERR_MSG}" -o sistr.json
   else
     if [ ${GENUS} == "Salmonella" ]; then
       /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t 4 -o sistr-output.tab $fasta
+      python /opt/docker/EToKi/externals/sistr_parser.py  -i sistr-output.tab -s "tak" -o sistr.json
     else
       # json na zly gatunek
+      ERR_MSG="This module works only with Salmonella"
       touch sistr-output.tab
+      python /opt/docker/EToKi/externals/sistr_parser.py  -i sistr-output.tab -s "nie" -r "\${ERR_MSG}" -o sistr.json
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC
   """
@@ -761,15 +777,18 @@ process run_sistr {
 
 process run_ectyper {
   // This process works only for Escherichia
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Predicting OH for sample $x with ectyper"
   publishDir "pipeline_wyniki/${x}/ECTyper", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "ectyper.json"
   cpus params.cpus
   maxForks 15
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('output.tsv')
+  tuple val(x), path('output.tsv'), emit: to_pubdir
+  tuple val(x), path('ectyper.json'), emit: json
+  
   // when:
   // GENUS == 'Escherichia'
   script:
@@ -784,13 +803,18 @@ process run_ectyper {
   if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
     # json na zle QC
     touch output.tsv
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    python /opt/docker/EToKi/externals/ectyper_parser.py  -i output.tsv -s "nie" -r "\${ERR_MSG}" -o ectyper.json
   else
     if [ ${GENUS} == "Escherichia" ]; then
       ectyper -i $fasta -c 4 -hpid 90 -o ectyper_out
       cp ectyper_out/output.tsv .
+      python /opt/docker/EToKi/externals/ectyper_parser.py  -i output.tsv -s "tak" -o ectyper.json
     else
        #json na zly gatunek
        touch output.tsv
+       ERR_MSG="This module works only with Escherichia"
+       python /opt/docker/EToKi/externals/ectyper_parser.py  -i output.tsv -s "nie" -r "\${ERR_MSG}" -o ectyper.json
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC
   """
@@ -798,12 +822,12 @@ process run_ectyper {
 
 
 process run_resfinder {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Predicting microbial resistance for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/ResFinder_results_table.txt"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/pheno_table_*.txt"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/PointFinder_results.txt"
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "resfinder/resfinder.json"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "resfinder.json"
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
@@ -871,7 +895,7 @@ process run_resfinder {
 }
 
 process run_cgMLST {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting cgMLST for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
@@ -907,7 +931,7 @@ process run_cgMLST {
 
 process parse_cgMLST {
   // Extracting ST given cgMLST profile, the output is identical to that from parse_7MLST
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Parsing cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}/cgMLST", mode: 'copy', pattern: 'cgMLST*txt'
@@ -1141,11 +1165,12 @@ process run_prokka {
 process run_VFDB {
   // Baza z czynnikami wirulencji w roznych bakteriach w tym salmonelli
   // Przygotowana baza z instrukcja jak ja przygotowac jest w /mnt/sda1/michall/db/VFDB/README
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   containerOptions '--volume /mnt/sda1/michall/db/VFDB:/db'
   // Ponownie montujemy na sztyno do /db bo taka lokalizacje na sztywno ma wpisany moj skrypt
   tag "Predicting VirulenceFactors for sample $x"
   publishDir "pipeline_wyniki/${x}/VFDB/", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "vfdb.json"
   cpus params.cpus
   maxForks 5
   input:
@@ -1154,6 +1179,7 @@ process run_VFDB {
   output:
   tuple val(x), path('VFDB_summary*txt'), val(SPECIES), val(GENUS), emit: non_ecoli
   tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations), optional: true, emit: ecoli
+  tuple val(x), path('vfdb.json'), emit: json
   //when:
   //GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
@@ -1162,9 +1188,11 @@ process run_VFDB {
   if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
     touch VFDB_summary_dummy.txt; touch VFDB_summary_Escherichia.txt  ; touch VFDB_summary_Shigella.txt
     # json na blad QC
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    python /opt/docker/EToKi/externals/vfdb_parser.py  -i VFDB_summary_Escherichia.txt -s "nie" -r "\${ERR_MSG}" -o vfdb.json
   else
     if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
-      SPEC2=""
+      SPEC2="unk"
 
       if [ "${GENUS}" == "Escherichia" ]; then
         # for Escherichia we must also check Shigella
@@ -1181,10 +1209,17 @@ process run_VFDB {
       if [ \${SPEC2} == "Shigella" ]; then
         /opt/docker/EToKi/externals/run_VFDB.sh $ffn ${task.cpus} \${SPEC2} \${PIDENT} \${EVAL} \${COV}
         mv VFDB_summary.txt VFDB_summary_\${SPEC2}.txt
+        cat VFDB_summary_${GENUS}.txt VFDB_summary_\${SPEC2}.txt >> VFDB_summary_all.txt 
+        python /opt/docker/EToKi/externals/vfdb_parser.py  -i VFDB_summary_all.txt -s "tak" -o vfdb.json
+      else
+        python /opt/docker/EToKi/externals/vfdb_parser.py  -i VFDB_summary_${GENUS}.txt -s "tak" -o vfdb.json
       fi
+
     else
       touch VFDB_summary_dummy.txt; touch VFDB_summary_Escherichia.txt  ; touch VFDB_summary_Shigella.txt
       # json na bledny rodzaj
+      ERR_MSG="This module was eneterd with wrong genus: ${GENUS} and poduced no valid output"
+      python /opt/docker/EToKi/externals/vfdb_parser.py  -i VFDB_summary_Escherichia.txt -s "nie" -r "\${ERR_MSG}" -o vfdb.json
     fi # koniec if-a na rodzja
   
   fi # koniec if-a na przejscie QC
@@ -1309,15 +1344,17 @@ process parse_VFDB_ecoli {
 
 process run_spifinder {
   // works only for salmonella
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Predicting virulence islands for sample $x"
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "spifinder.json"
   // cpus params.cpus
   // maxForks 5
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('spifinder_results/*')
+  tuple val(x), path('spifinder_results/results_tab.tsv'), emit: to_pubdir
+  tuple val(x), path('spifinder.json'), emit: json
   // when:
   // GENUS == 'Salmonella'  
   script:
@@ -1329,14 +1366,19 @@ process run_spifinder {
   # -x to rozszerzony output
 
   if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then  
-    touch spifinder_results/dummy_file.txt
+    touch spifinder_results/results_tab.tsv
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    python /opt/docker/EToKi/externals/spifinder_parser.py  -i spifinder_results/dummy_file.txt  -s "nie" -r "\${ERR_MSG}" -o spifinder.json
     # json na zle QC
   else
     if [ ${GENUS} == "Salmonella" ]; then
       python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
+      python /opt/docker/EToKi/externals/spifinder_parser.py  -i spifinder_results/results_tab.tsv  -s "tak" -o spifinder.json
     else
-      touch spifinder_results/dummy_file.txt
+      touch spifinder_results/results_tab.tsv
       # json na zly gatunek
+      ERR_MSG="This module works only with Salmonella"
+      python /opt/docker/EToKi/externals/spifinder_parser.py  -i spifinder_results/dummy_file.txt  -s "nie" -r "\${ERR_MSG}" -o spifinder.json
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC
   """
@@ -1347,7 +1389,7 @@ process run_spifinder {
 process run_kraken2_illumina {
   // kraken2 instalowany jest przez ETOKI i jest w path kontenera do salmonelli
   tag "Run kraken2 for sample:${x}"
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken_*.txt"
@@ -1397,7 +1439,7 @@ process run_kraken2_illumina {
 
 process run_metaphlan_illumina {
   tag "Run Metaphlan for sample:${x}"
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   publishDir "pipeline_wyniki/${x}/metaphlan", mode: 'copy', pattern: "report_metaphlan*"
   containerOptions "--volume ${params.metaphlan_db_absolute_path_on_host}:/bowtie_db"
   maxForks 6
@@ -1428,7 +1470,7 @@ process run_metaphlan_illumina {
 process run_kmerfinder_illumina {
   // This module unlike krakern and metaphlan will pass QC_STATUS and TOTAL_BASES to get_species_illumina
   tag "kmerfinder:${x}"
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results.spa"
   containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
   maxForks 5
@@ -1466,7 +1508,7 @@ process run_pHierCC_enterobase {
   // It work only for Salmonella and Escherichia as Campylo is not present in Enterobase
   maxRetries 3
   errorStrategy 'retry' // in case there is aroblem with internet connection
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Predicting hierCC from enterobase for sample $x"
   publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
@@ -1657,7 +1699,7 @@ process run_pHierCC_local {
   // Ponadto Funkcja odpytuje dwa pliki przygotowane przeze mnie 
   // Jeden zawierajacy klastrowanie SINGLE linkage zbudowane na 430k profili z enterobase
   // Drugi zawierajacy klastrowanie COMPLETE linkage zbudowane na 430k profili z enterobae
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting hierCC with local database for sample $x"
   publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
@@ -1824,7 +1866,7 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f, gzip.open(f'{di
 
 
 process extract_historical_data_enterobase {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Extracting historical data for sample $x"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
@@ -1945,7 +1987,7 @@ with open('parsed_phiercc_enterobase.txt') as f1, open('enterobase.json', 'w') a
 }
 
 process plot_historical_data_enterobase {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Plot historical data for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
@@ -1980,7 +2022,7 @@ process extract_historical_data_pubmlst {
   // The script is nearly identical to extract_historical_data_enterobase
   // However it is eqecuted on a different "branch" of a pipeline
   // and must be duplicated 
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Extracting historical data for sample $x"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
@@ -2089,7 +2131,7 @@ with open('parsed_phiercc_pubmlst.txt') as f1, open('pubmlst.json', 'w') as f2:
 
 
 process plot_historical_data_pubmlst {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Plot historical data for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
@@ -2119,14 +2161,16 @@ fi
 }
 
 process run_amrfinder {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Predicting microbial resistance with AMRfinder for sample $x"
   publishDir "pipeline_wyniki/${x}/AMRplus_fider", mode: 'copy', pattern: "AMRfinder*"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'amrfinder.json'
   containerOptions "--volume ${params.AMRFINDER_db_absolute_path_on_host}:/AMRfider"
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt')
+  tuple val(x), path('AMRfinder_resistance.txt'), path('AMRfinder_virulence.txt'), emit: to_pubdir
+  tuple val(x), path('amrfinder.json'), emit: json
   // -n input, plik z sekwencja nukleotydowa
   // -d input, sciezka do bazy AMRfindera 
   // -i input, seq identity miedzy targetem a query
@@ -2145,6 +2189,8 @@ process run_amrfinder {
     touch AMRfinder_resistance.txt
     touch AMRfinder_virulence.txt
     # json z wynikami
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    python /opt/docker/EToKi/externals/amrfinder_parser.py -i AMRfinder_resistance.txt -s "nie" -r "\${ERR_MSG}" -o amrfinder.json
     # Komentarz NIE uzywac exit 0 wewnatrz script
   else
     if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
@@ -2152,9 +2198,12 @@ process run_amrfinder {
  
       cat initial_output.txt  | awk 'BEGIN{FS="\\t"}; {if(\$9 == "AMR" || \$1 == "Protein identifier") print \$0}' > AMRfinder_resistance.txt
       cat initial_output.txt  | awk 'BEGIN{FS="\\t"}; {if(\$9 == "VIRULENCE" || \$1 == "Protein identifier") print \$0}' > AMRfinder_virulence.txt
+      python /opt/docker/EToKi/externals/amrfinder_parser.py -i AMRfinder_resistance.txt -s "tak" -o amrfinder.json
     else
       touch AMRfinder_resistance.txt
       touch AMRfinder_virulence.txt
+      ERR_MSG="This module was eneterd with wrong species and poduced no valid output"
+      python /opt/docker/EToKi/externals/amrfinder_parser.py -i AMRfinder_resistance.txt -s "nie" -r "\${ERR_MSG}" -o amrfinder.json
       # json z wynikami
     fi
   fi
@@ -2168,13 +2217,16 @@ process run_amrfinder {
 
 
 process run_plasmidfinder {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Predicting plasmids for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'plasmidfinder.json'
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
-  tuple val(x), path('plasmidfinder/results_tab.tsv')
+  tuple val(x), path('plasmidfinder/results_tab.tsv'), emit: to_pubdir
+  tuple val(x), path('plasmidfinder.json'), emit: json
+  
   // when:
   // GENUS == 'Salmonella' || GENUS == 'Escherichia' || GENUS == 'Campylobacter'
   script:
@@ -2188,27 +2240,34 @@ process run_plasmidfinder {
   
   if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
     mkdir plasmidfinder; touch plasmidfinder/results_tab.tsv
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    python /opt/docker/EToKi/externals/plasmidfinder_parser.py  -i plasmidfinder/results_tab.tsv -s "nie" -r "\${ERR_MSG}" -o plasmidfinder.json
     # json zle QC
   else  
     if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
       mkdir plasmidfinder # program wymaga tworzenia katalogu samodzielnie
       /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder -p /opt/docker/plasmidfinder_db -l 0.6 -t 0.9 -x
+      python /opt/docker/EToKi/externals/plasmidfinder_parser.py  -i plasmidfinder/results_tab.tsv -s "tak" -o plasmidfinder.json
     else
       mkdir plasmidfinder; touch plasmidfinder/results_tab.tsv
-     # json zly gatunek
+      ERR_MSG="This module was eneterd with wrong species and poduced no valid output"
+      python /opt/docker/EToKi/externals/plasmidfinder_parser.py  -i plasmidfinder/results_tab.tsv -s "nie" -r "\${ERR_MSG}" -o plasmidfinder.json
+      # json zly gatunek
     fi
   fi
   """
 }
 
 process run_virulencefinder {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Predicting plasmids for sample $x"
   publishDir "pipeline_wyniki/${x}/virulencefinder", mode: 'copy', pattern: "results_tab.tsv"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'virulencefinder.json'
   input:
   tuple val(x), path(fasta),  val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
   tuple val(x), path('results_tab.tsv')
+  tuple val(x), path('virulencefinder.json'), emit: json
   // when:
   // GENUS == 'Escherichia'
   script:
@@ -2226,13 +2285,18 @@ process run_virulencefinder {
 
   if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
     touch results_tab.tsv
+    ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
+    python /opt/docker/EToKi/externals/virulencefinder_parser.py  -i  results_tab.tsv -s "nie" -r "\${ERR_MSG}" -o virulencefinder.json
     # json na zle QC
   else
     if [ ${GENUS} == "Escherichia" ]; then
       /opt/docker/virulencefinder/virulencefinder.py  -i $fasta -o virulencefinder -p /opt/docker/virulencefinder_db  -d virulence_ecoli -l 0.6 -t 0.9 -x >> log 2>&1
       cp virulencefinder/results_tab.tsv .
+      python /opt/docker/EToKi/externals/virulencefinder_parser.py  -i results_tab.tsv -s "tak" -o virulencefinder.json
     else
       touch results_tab.tsv
+      ERR_MSG="This module was eneterd with wrong species and poduced no valid output"
+      python /opt/docker/EToKi/externals/virulencefinder_parser.py  -i  results_tab.tsv -s "nie" -r "\${ERR_MSG}" -o virulencefinder.json
       #json na zly gatunek
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC

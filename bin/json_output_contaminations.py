@@ -151,7 +151,7 @@ def main_program(input_kraken, input_metaphlan_genera, input_metaphlan_species, 
         full_output.append(kmerfinder_json)
 
     with open(output, 'w') as f:
-        f.write(json.dumps(full_output))
+        f.write(json.dumps(full_output, indent = 4))
 
     return True
 

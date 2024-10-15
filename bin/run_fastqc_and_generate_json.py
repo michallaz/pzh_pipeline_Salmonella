@@ -55,7 +55,7 @@ def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, p
         # check if predefined QC status is not "tak"
         json_dict = [{"status": status, "file_name": input_file, "step_name": stage, "error_message": error}]
         with open(output, 'w') as f1:
-            f1.write(json.dumps(json_dict))
+            f1.write(json.dumps(json_dict, indent = 4))
         # We always print the output, otherwise bash cannot "capture" the values reruned by this script
         print(f"{status} 0 ")
         return status, 0
@@ -69,7 +69,7 @@ def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, p
             json_dict = [{"status": {status}, "file_name": input_file, "step_name": stage,
                          "error_message": "Provided file does not exists"}]
             with open(output, 'w') as f1:
-                f1.write(json.dumps(json_dict))
+                f1.write(json.dumps(json_dict, indent = 4))
             print(f"{status} 0")
             return status, 0
         # to wywoluje polecenie fastqc na pliku, przy okazji obsluzymy wyjatek ze podany plik nie jest
@@ -79,7 +79,7 @@ def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, p
             json_dict = [{"status": "blad", "file_name": input_file, "step_name": stage,
                           "error_message": "Provided file is not in fastq format"}]
             with open(output, 'w') as f1:
-                f1.write(json.dumps(json_dict))
+                f1.write(json.dumps(json_dict, indent = 4))
             print(f"{status} 0")
             return status, 0
         # mamy plik z wynikami i fastqc go przeprocesowal
@@ -126,7 +126,7 @@ def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, p
                             json_dict = [{"status": "blad", "file_name": input_file, "step_name": stage,
                                           "error_message": f"Reads quality is belowed minimum required level"}]
                             with open(output, 'w') as f1:
-                                f1.write(json.dumps(json_dict))
+                                f1.write(json.dumps(json_dict, indent = 4))
                             print(f"{status} 0")
                             return status, 0
                     # koniec sekcji mozna zrzucac wyniki
@@ -146,7 +146,7 @@ def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, p
                                               "error_message": f"The file has less than minimum required"
                                                                f" number of reads"}]
                                 with open(output, 'w') as f1:
-                                    f1.write(json.dumps(json_dict))
+                                    f1.write(json.dumps(json_dict, indent = 4))
                                 print(f"{status} 0")
                                 return status, 0
                         if line[0] == "Sequence length":
@@ -191,7 +191,7 @@ def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, p
                                 json_dict = [{"status": "blad", "file_name": input_file, "step_name": stage,
                                              "error_message": "Error when parsing fastqc file"}]
                                 with open(output, 'w') as f1:
-                                    f1.write(json.dumps(json_dict))
+                                    f1.write(json.dumps(json_dict, indent = 4))
                                 print(f"{status} 0")
                                 return status, 0
 
@@ -211,7 +211,7 @@ def main_program(input_file, memory, cpu, min_number, min_qual, status, stage, p
                   "position_quality_plot_path": f"{publishdir}/{position_quality_plot_path}",
                   "gc_content_value": round(float(gc_content_value), 2)}]
     with open(output, 'w') as f1:
-        f1.write(json.dumps(json_dict))
+        f1.write(json.dumps(json_dict, indent = 4))
     print(f"{status}  {number_of_bases_value}")
     return status, int(number_of_bases_value)
 
