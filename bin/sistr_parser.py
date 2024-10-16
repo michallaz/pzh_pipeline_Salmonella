@@ -40,7 +40,7 @@ def main_program(status, input_file, output, error=""):
         o_antigen_data = []
         for element in o_antigen.split(","):
             o_antigen_data.append({"antigen_id" : element})
-        serovar_antigen = line[17]
+        serovar_antigen = line[15]
         json_output = {"program_name": "sistr",
                        "status": status,
                        "serotype_name" : serovar_antigen,

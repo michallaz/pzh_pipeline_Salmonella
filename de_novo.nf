@@ -593,7 +593,8 @@ matching_ST, min_value, matching_ST_profile, sample_profile, all_loci_names = ge
 missing_loci_value = 0
 list_to_dump = []
 for loci_name, allele_value in zip(all_loci_names.split("\\t"), sample_profile.split("\\t")):
-    list_to_dump.append({str(loci_name):int(allele_value)})
+    list_to_dump.append({"locus_name": str(loci_name),
+                         "locus_allel_id": int(allele_value)})
     if int(allele_value) == -1:
         missing_loci_value += 1
 ### matching_ST is a string
@@ -1008,7 +1009,8 @@ matching_ST, min_value,  matching_ST_profile, sample_profile, all_loci_names = g
 list_to_dump = []
 missing_loci_value = 0
 for loci_name, allele_value in zip(all_loci_names.split("\\t"), sample_profile.split("\\t")):
-    list_to_dump.append({str(loci_name):int(allele_value)})
+    list_to_dump.append({"locus_name": str(loci_name),
+                         "locus_allel_id": int(allele_value)})
     if int(allele_value) == -1:
         missing_loci_value += 1
 
@@ -1825,7 +1827,8 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f, gzip.open(f'{di
     list_to_dump = []
     # header ma slowo ST w nazwie ktore omijamu
     for level_name, level_value in zip(phiercc_header.split("\\t")[1:], lista_poziomow):
-        list_to_dump.append({level_name.rstrip():level_value.rstrip()})
+        list_to_dump.append({"level": re.findall("\\d+", level_name.rstrip())[0],
+                             "group_id": level_value.rstrip()})
     with open('cgMLST_json_phiercc_local.json', "w") as f:
         to_dump = {"hiercc_clustering_internal_data": list_to_dump}
         f.write(json.dumps(to_dump))    
@@ -1984,11 +1987,12 @@ list_withphiercc_to_dump = []
 with open('parsed_phiercc_enterobase.txt') as f1, open('enterobase.json', 'w') as f2:
     naglowek, wartosci = f1.readlines()
     for level_name, level_value in zip(naglowek.split("\\t")[1:], wartosci.split("\\t")[1:]):
-        list_withphiercc_to_dump.append({level_name.rstrip() : level_value.rstrip()})
+        list_withphiercc_to_dump.append({"level": re.findall("\\d+", level_name.rstrip())[0],
+                                         "group_id": level_value.rstrip()})
 
     to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
-               "hiercc_historical_level" : phiercc_level_userdefined,
-               "hiercc_historicaldata_path" :  "pipeline_wyniki/${x}/enterobase_historical_data.txt"}
+               "hiercc_historical_data" : [{"level" : phiercc_level_userdefined,
+                                            "data_path" : "pipeline_wyniki/${x}/enterobase_historical_data.txt"}]}
     f2.write(json.dumps(to_dump))
 """
 }
@@ -2128,11 +2132,12 @@ list_withphiercc_to_dump = []
 with open('parsed_phiercc_pubmlst.txt') as f1, open('pubmlst.json', 'w') as f2:
     naglowek, wartosci = f1.readlines()
     for level_name, level_value in zip(naglowek.split("\\t")[1:], wartosci.split("\\t")[1:]):
-        list_withphiercc_to_dump.append({level_name.rstrip() : level_value.rstrip()})
+        list_withphiercc_to_dump.append({"level": level_name.rstrip(),
+                                         "group_id": level_value.rstrip()})
 
     to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
-               "hiercc_historical_level" : phiercc_level_userdefined,
-               "hiercc_historicaldata_path" :  "pipeline_wyniki/${x}/pubmlst_historical_data.txt"}
+               "hiercc_historical_data" : [{"level" : phiercc_level_userdefined,
+               "data_path" : "pipeline_wyniki/${x}/pubmlst_historical_data.txt"}]}
     f2.write(json.dumps(to_dump))
 """
 }

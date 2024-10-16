@@ -49,7 +49,7 @@ def main_program(input_kraken, input_metaphlan_genera, input_metaphlan_species, 
             genus_names_sorted = sorted(genus_dict, key=lambda x: genus_dict[x], reverse=True)
             species_names_sorted = sorted(species_dict, key=lambda x: species_dict[x], reverse=True)
             kraken2_json = {"program_name": "kraken2",
-                            "status": "Tak",
+                            "status": "tak",
                             "main_genus_name": genus_names_sorted[0],
                             "secondary_genus_name": genus_names_sorted[1],
                             "main_species_name": species_names_sorted[0],
@@ -92,7 +92,7 @@ def main_program(input_kraken, input_metaphlan_genera, input_metaphlan_species, 
                 species_dict['None'] = 0
 
             metaphlan_json = {"program_name": "metaphlan",
-                              "status": "Tak",
+                              "status": "tak",
                               "main_genus_name": genus_names_sorted[0],
                               "secondary_genus_name": genus_names_sorted[1],
                               "main_species_name": species_names_sorted[0],
@@ -142,7 +142,7 @@ def main_program(input_kraken, input_metaphlan_genera, input_metaphlan_species, 
                 species_dict['None'] = 0
 
             kmerfinder_json = {"program_name": "kmerfinder",
-                               "status": "Tak",
+                               "status": "tak",
                                "main_species_name": species_names_sorted[0],
                                "secondary_species_name": species_names_sorted[1],
                                "main_species_coverage": f'{species_dict[species_names_sorted[0]]:.2f}',

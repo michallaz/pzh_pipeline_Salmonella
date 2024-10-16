@@ -61,7 +61,7 @@ def main_program(sistr_file, seqsero_file, spifinder_file,  ectyper_file,  virul
     json_output["output"]["pathogen"] = "bacteria"
     json_output["output"]["timestamp"] = datetime.datetime.now().isoformat()
     json_output["output"]["pipeline_version"] = repo_version
-    json_output["output"]["genome_file_data"] = json.load(open(genome_file))
+    json_output["output"]["genome_files_data"] = json.load(open(genome_file))
     if fastqc_reverse_file != "skip":
         json_output["output"]["sequencing_summary_data"] = [json.load(open(fastqc_forward_file))[0],
                                                        json.load(open(fastqc_reverse_file))[0]]

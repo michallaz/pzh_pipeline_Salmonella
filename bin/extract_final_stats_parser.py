@@ -87,7 +87,7 @@ def main_program(input_file_filtered, input_file_unfiltered, max_contigs, nvalue
             filtered_average_covereage_value < coverage or \
             filtered_total_length_value < (float(completness) * int(genome_length)):
             status = "blad"
-            QC_names = ['N50_value', "number_of_contigs_value", "average_covereage_value", "genome_completness"]
+            QC_names = ['N50_value', "number_of_contigs_value", "average_coverage_value", "genome_completness"]
             QC_values = [filtered_N50_value,
                          filtered_number_of_contigs_value,
                          filtered_average_covereage_value,
@@ -109,7 +109,7 @@ def main_program(input_file_filtered, input_file_unfiltered, max_contigs, nvalue
                              "status": "tak",
                              "total_length_value": filtered_total_length_value,
                              "number_of_contigs_value": filtered_number_of_contigs_value,
-                             "average_covereage_value": filtered_average_covereage_value,
+                             "average_coverage_value": filtered_average_covereage_value,
                              "N50_value": filtered_N50_value,
                              "L50_value": filtered_L50_value,
                              "number_of_Ns_value": filtered_number_of_Ns_value}
@@ -135,7 +135,7 @@ def main_program(input_file_filtered, input_file_unfiltered, max_contigs, nvalue
                            "status": "tak",
                            "total_length_value": unfiltered_total_length_value,
                            "number_of_contigs_value": unfiltered_number_of_contigs_value,
-                           "average_covereage_value": unfiltered_average_covereage_value,
+                           "average_coverage_value": unfiltered_average_covereage_value,
                            "N50_value": unfiltered_N50_value,
                            "L50_value": unfiltered_L50_value,
                            "number_of_Ns_value": unfiltered_number_of_Ns_value}
