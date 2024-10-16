@@ -22,7 +22,8 @@ def main_program(status, input_file, output, error=""):
                         "error_message": error}
     else:
         json_output = {"status": status,
-                       "program_name" : "VFDB",}
+                       "program_name" : "VFDB",
+                       "patotype_data" : [{"patotype_name" : "NA"}]}
 
         with open(input_file) as f:
             virulence_genes_data = []

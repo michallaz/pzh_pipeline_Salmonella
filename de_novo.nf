@@ -428,7 +428,7 @@ process extract_final_contigs {
 process extract_final_stats {
   container  = params.main_image
   tag "Calculating basic statistics for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*txt"
   publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "bacterial_genome_data.json"
   input:
   tuple val(x), path(fasta), path(fasta_reject), val(QC_status), val(GENUS)
@@ -687,7 +687,7 @@ process run_Seqsero {
   // SeqSero only works for Salmonella
   container  =  params.main_image
   tag "Predicting OH for sample $x with Seqsero"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/seqsero", mode: 'copy',  pattern: "seqsero/SeqSero_result.txt"
   publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "seqsero.json"
   cpus params.cpus
   maxForks 15
@@ -724,6 +724,7 @@ process run_Seqsero {
       #json na zly gatunek
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC
+  cp -r seqsero/* .
   """
 }
 
@@ -731,7 +732,7 @@ process run_sistr {
   // Sistr works only for Salmonella
   container  =  params.main_image
   tag "Predicting OH for sample $x with Sistr"
-  publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy', pattern: "sistr-output.tab"
   publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "sistr.json"
   cpus params.cpus
   maxForks 15
@@ -1192,7 +1193,8 @@ process run_VFDB {
     python /opt/docker/EToKi/externals/vfdb_parser.py  -i VFDB_summary_Escherichia.txt -s "nie" -r "\${ERR_MSG}" -o vfdb.json
   else
     if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
-      SPEC2="unk"
+     touch VFDB_summary_dummy.txt; touch VFDB_summary_Escherichia.txt  ; touch VFDB_summary_Shigella.txt 
+     SPEC2="unk"
 
       if [ "${GENUS}" == "Escherichia" ]; then
         # for Escherichia we must also check Shigella
@@ -1235,11 +1237,13 @@ process parse_VFDB_ecoli {
   input:
   tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
-  tuple val(x), path('VFDB_phenotype.txt')
+  tuple val(x), path('VFDB_phenotype.txt'), emit: to_pubdir
+  tuple val(x), env(PATOTYP), emit: json
   //when:
   //GENUS == 'Escherichia'
   script:
   """
+    PATOTYP=("NA")
     if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
        touch VFDB_phenotype.txt
        # json na zle QC
@@ -1333,7 +1337,8 @@ process parse_VFDB_ecoli {
           echo -e "ETEC\testIa" >> VFDB_phenotype.txt
         fi
 
-        ### Koniec  
+        ### Koniec
+        PATOTYP=(`cat VFDB_phenotype.txt | cut -f1`)
     else
       touch VFDB_phenotype.txt
       # json na zly gatunek
@@ -1346,7 +1351,7 @@ process run_spifinder {
   // works only for salmonella
   container  = params.main_image
   tag "Predicting virulence islands for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/spifinder", mode: 'copy', pattern: "results_tab.tsv"
   publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "spifinder.json"
   // cpus params.cpus
   // maxForks 5
@@ -1381,6 +1386,7 @@ process run_spifinder {
       python /opt/docker/EToKi/externals/spifinder_parser.py  -i spifinder_results/dummy_file.txt  -s "nie" -r "\${ERR_MSG}" -o spifinder.json
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC
+  cp spifinder_results/results_tab.tsv .
   """
 }
 
@@ -1869,7 +1875,8 @@ process extract_historical_data_enterobase {
   container  = params.main_image
   tag "Extracting historical data for sample $x"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "enterobase_historical_data.txt"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "enterobase.json"
   input:
   tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES), val(GENUS),  val(QC_status), val(QC_status_contaminations)
   output:
@@ -2025,7 +2032,8 @@ process extract_historical_data_pubmlst {
   container  = params.main_image
   tag "Extracting historical data for sample $x"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "pubmlst_historical_data.txt"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "pubmlst.json"
   input:
   tuple val(x), path('parsed_phiercc_pubmlst.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
@@ -2219,7 +2227,7 @@ process run_amrfinder {
 process run_plasmidfinder {
   container  = params.main_image
   tag "Predicting plasmids for sample $x"
-  publishDir "pipeline_wyniki/${x}/", mode: 'copy'
+  publishDir "pipeline_wyniki/${x}/plasmidfinder", mode: 'copy', pattern: "results_tab.tsv"
   publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'plasmidfinder.json'
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
@@ -2255,6 +2263,7 @@ process run_plasmidfinder {
       # json zly gatunek
     fi
   fi
+  cp plasmidfinder/results_tab.tsv .
   """
 }
 
@@ -2472,17 +2481,83 @@ else:
   """
 }
 
+process run_split_fasta {
+  // Prosty proces to rozdzielenia pliku z wieloma fastami na podfasty
+  // Oraz wygenerowanie odpowiedniego jsona
+  container  = params.main_image
+  tag "Splitting genome fasta for sample $x"
+  publishDir "pipeline_wyniki/${x}/fastas", mode: 'copy', pattern: "*fasta"
+  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "fasta_info.json"
+  input:
+    tuple val(x), path(fasta), val(QC_status)
+  output:
+    tuple val(x), path("fasta_info.json"), emit: json
+    tuple val(x), path("*fasta"), emit: to_pubdir
+  script:
+  """
+#!/usr/bin/python
+from Bio import SeqIO
+import json
+
+qc_status="$QC_status"
+fasta_file="$fasta"
+
+json_output = {}
+tmp_list = []
+
+if qc_status == "nie":
+    with open("dummy.fasta", "w") as f:
+       f.write("This module was eneterd with failed QC and poduced no valid output")
+    json_output["status"] = "nie"
+    json_output["error_message"] = "This module was eneterd with failed QC and poduced no valid output"
+else:
+    json_output["status"] = "tak"
+    records = SeqIO.parse(fasta_file, "fasta")
+    for record in records:
+        tmp_list.append({"segment_name" : record.id,
+                         "segment_path" : "pipeline_wyniki/${x}/fastas/" + f"{record.id}.fasta"})
+        with open(f"{record.id}.fasta", "w") as f:
+            f.write(f">{record.id}\\n{str(record.seq)}")
+
+json_output["file_data"] = tmp_list
+
+with open("fasta_info.json", 'w') as f1:
+        f1.write(json.dumps(json_output, indent = 4))
+
+  """
+}
+
 process merge_all_subjsons_illumina {
   container  = params.main_image
   tag "Merging all subjsons for sample $x"
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "${x}_mlst.json"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}.json"
   input:
-  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("reverse.json"), path("contaminations.json"), path("initial_MLST.json"), path("bacterial_genome.json")
+  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), val(PATOTYP), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("reverse.json"), path("contaminations.json"), path("initial_MLST.json"), path("genome_file.json"), path("bacterial_genome.json")
   output:
-  path("${x}_mlst.json")
+  path("${x}.json")
   script:
   """
-  touch ${x}_mlst.json
+  VERSION="SOME_VERSION"
+  python /opt/docker/EToKi/externals/prepare_full_json.py --sistr_file sistr.json \
+                                                          --seqsero_file seqsero.json \
+                                                          --spifinder_file spifinder.json \
+                                                          --ectyper_file ectyper.json \
+                                                          --virulencefinder_file virulencefinder.json \
+                                                          --vfdb_file vfdb.json \
+                                                          --patotyp "${PATOTYP}" \
+                                                          --plasmidfinder_file plasmidfinder.json \
+                                                          --amrfinder_file amrfinder.json \
+                                                          --resfinder_file resfinder.json \
+                                                          --cgmlst_file cgMLST.json \
+                                                          --mlst_file MLST.json \
+                                                          --fastqc_forward_file forward.json \
+                                                          --fastqc_reverse_file reverse.json \
+                                                          --contaminations_file contaminations.json \
+                                                          --initial_mlst_file initial_MLST.json \
+                                                          --genome_statistics_file bacterial_genome.json \
+                                                          --genome_file genome_file.json \
+                                                          --repo_version "\${VERSION}" \
+                                                          --output ${x}.json
   """
 
 }
@@ -2920,15 +2995,36 @@ fi
 process merge_all_subjsons_nanopore {
   container  = params.main_image
   tag "Merging all subjsons for sample $x"
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "${x}_mlst.json"
+  publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}.json"
   input:
-  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("contaminations.json"), path("initial_MLST.json"), path("bacterial_genome.json")
+  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), val(PATOTYP), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("contaminations.json"), path("initial_MLST.json"), path("genome_file.json"), path("bacterial_genome.json")
   output:
-  path("${x}_mlst.json")
+  path("${x}.json")
   script:
   """
-  touch ${x}_mlst.json
+  VERSION="SOME_VERSION"
+  python /opt/docker/EToKi/externals/prepare_full_json.py --sistr_file sistr.json \
+                                                          --seqsero_file seqsero.json \
+                                                          --spifinder_file spifinder.json \
+                                                          --ectyper_file ectyper.json \
+                                                          --virulencefinder_file virulencefinder.json \
+                                                          --vfdb_file vfdb.json \
+                                                          --patotyp "${PATOTYP}" \
+                                                          --plasmidfinder_file plasmidfinder.json \
+                                                          --amrfinder_file amrfinder.json \
+                                                          --resfinder_file resfinder.json \
+                                                          --cgmlst_file cgMLST.json \
+                                                          --mlst_file MLST.json \
+                                                          --fastqc_forward_file forward.json \
+                                                          --fastqc_reverse_file skip \
+                                                          --contaminations_file contaminations.json \
+                                                          --initial_mlst_file initial_MLST.json \
+                                                          --genome_statistics_file bacterial_genome.json \
+                                                          --genome_file genome_file.json \
+                                                          --repo_version "\${VERSION}" \
+                                                          --output ${x}.json
   """
+
 
 }
 
@@ -3193,6 +3289,10 @@ initial_scaffold = run_flye(processed_fastq)
 }
 
 // All modules below are shared between nanopore and illumina
+
+// Split multifasta into separate fastas and create json output 
+run_split_fasta_out = run_split_fasta(final_assembly)
+
 // Assembly quality
 
 (extract_final_stats_statistics, extract_final_stats_genome, extract_final_stats_json) = extract_final_stats(final_assembly_with_reject.join(predict_species_genus,  by : 0))
@@ -3252,6 +3352,7 @@ run_sistr_out = run_sistr(final_assembly_with_species)
   channnel_to_json = channnel_to_json.join(run_ectype_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_virulencefinder_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_VFDB_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(parse_VFDB_ecoli_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_plasmidfinder_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_amrfinder_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_resfinder_out.json, by : 0)
@@ -3259,10 +3360,14 @@ run_sistr_out = run_sistr(final_assembly_with_species)
   channnel_to_json = channnel_to_json.join(parse_7MLST_out.json, by : 0)
   
 
+
 if(params.machine == 'Illumina') {
   initial_to_json = run_fastqc_illumina_out.json.join(predict_species_json, by : 0) // predict_species_json to explicite nazwany kanal wyjscia podczas wywolania subworkflow
   initial_to_json = initial_to_json.join(initial_mlst_out.json,  by : 0) 
+  initial_to_json = initial_to_json.join(run_split_fasta_out.json, by : 0)
   initial_to_json = initial_to_json.join(extract_final_stats_json,  by : 0) // extract_final_stats_json to explicite nazwany kanal wyjscia podczas wywolania modulu
+  
+
   channnel_to_json = channnel_to_json.join(initial_to_json, by : 0)
   merge_all_subjsons_illumina(channnel_to_json)
   // modul do zapisywania merge'u jsona  
@@ -3270,6 +3375,7 @@ if(params.machine == 'Illumina') {
   // Nanopore rozni sie tylko outputem kanalu fastqc 
   initial_to_json = run_fastqc_nanopore_out.json.join(predict_species_json, by : 0) // predict_species_json to explicite nazwany kanal wyjscia podczas wywolania subworkflow
   initial_to_json = initial_to_json.join(initial_mlst_out.json,  by : 0)
+  initial_to_json = initial_to_json.join(run_split_fasta_out.json, by : 0)
   initial_to_json = initial_to_json.join(extract_final_stats_json,  by : 0) // extract_final_stats_json to explicite nazwany kanal wyjscia podczas wywolania modulu
   channnel_to_json = channnel_to_json.join(initial_to_json, by : 0)
 
