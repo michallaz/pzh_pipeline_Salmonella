@@ -5,7 +5,7 @@ import json
 
 
 @click.command()
-@click.option('-i', '--input_file', help='[INPUT] a path to an input file with spifinder results',
+@click.option('-i', '--input_file', help='[INPUT] a path to an input file with VFDB results',
               type=click.Path(),  required=True)
 @click.option('-s', '--status', help='[INPUT] PREDEFINED status that is transferred to an output json. '
                                      'If this status was either nie or blad fastqc will not run',

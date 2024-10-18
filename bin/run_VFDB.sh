@@ -54,8 +54,8 @@ do
 		REF_NAME=`cat tmp | sort -rnk9 | head -1 | cut -f2 | tr "(" " " | cut -d " " -f2 | tr -d ")"`
 		SEQ_ID=`cat tmp | sort -rnk9 | head -1 | cut -f9`
 		SLEN=`cat tmp | sort -rnk9 | head -1 | cut -f8`
-		QLEN_END=`cat tmp | sort -rnk9 | head -1 | cut -f7`
-		QLEN_START=`cat tmp | sort -rnk9 | head -1 | cut -f6`
+		QLEN_END=`cat tmp | sort -rnk9 | head -1 | cut -f4`
+		QLEN_START=`cat tmp | sort -rnk9 | head -1 | cut -f3`
 		COV=`echo "${SLEN}/(${QLEN_END} - ${QLEN_START} + 1) * 100" | bc -l`
 		echo -e "Dla ${K} zapisuje ${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}"
 		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}\t${SEQ_ID}\t${COV}\t${REF_NAME}\tONE_HIT" >> VFDB_summary.txt
@@ -65,8 +65,8 @@ do
 		REF_NAME=`cat tmp | sort -rnk9 | head -1 | cut -f2 | tr "(" " " | cut -d " " -f2 | tr -d ")"`
 		SEQ_ID=`cat tmp | sort -rnk9 | head -1 | cut -f9`
                 SLEN=`cat tmp | sort -rnk9 | head -1 | cut -f8`
-                QLEN_END=`cat tmp | sort -rnk9 | head -1 | cut -f7`
-                QLEN_START=`cat tmp | sort -rnk9 | head -1 | cut -f6`
+                QLEN_END=`cat tmp | sort -rnk9 | head -1 | cut -f4`
+                QLEN_START=`cat tmp | sort -rnk9 | head -1 | cut -f3`
                 COV=`echo "${SLEN}/(${QLEN_END} - ${QLEN_START} + 1) * 100" | bc -l`
 		echo -e "Dla ${K} zapisuje wielohitowej ${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}"
 		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}\t${SEQ_ID}\t${COV}\t${REF_NAME}\tMULTIPLE_HITS" >> VFDB_summary.txt

@@ -174,7 +174,7 @@ process clean_fastq_illumina {
   // Ta funkcja generalnie mimikuje dzialanie trimmomatic-a. Wiec teoretycznie mozna uzyc jego
   // Default na trimming to quality 6 (-q to zmienia)
 
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   tag "Fixing fastq dla sample $x"
   maxForks 5
   input:
@@ -466,7 +466,7 @@ process extract_final_stats {
 }
 
 process run_7MLST {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting MLST for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
@@ -513,7 +513,7 @@ process parse_7MLST {
   // // Third file is MLST_closest_ST_full_list_of_allels.txt contains eight columns (1st is the ST identified for a sample, followed by allel versions for each locus of that ST)
   // // If the distance between between identified and expexted profiles is 0 (As indicated in MLST_parsed_output.txt) this file should be identical to MLST_sample_full_list_of_allels.txt
 
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Parsing MLST for sample $x"
   publishDir "pipeline_wyniki/${x}/MLST", mode: 'copy', pattern: 'MLST*txt'
@@ -1136,7 +1136,7 @@ process run_prokka {
  
   // I assume there is no point checking here what is the organism
 
-  container  = 'staphb/prokka:latest'
+  container  = params.prokka_image
   tag "Predicting genes for sample $x"
   // Do we really need prokka output in results dir ? 
   publishDir "pipeline_wyniki/${x}", mode: 'copy'
@@ -1620,7 +1620,7 @@ with open('parsed_phiercc_enterobase.txt', 'w') as f:
 }
 
 process run_pHierCC_pubmlst {
-  container  = 'salmonella_illumina:2.0'
+  container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting hierCC with local database for sample $x"
   publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
