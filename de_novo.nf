@@ -67,10 +67,7 @@ params.min_coverage_value = 20 // Second requirment for a contig to pass filter 
 // Databases for ALL available species
 
 params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
-params.AMRFINDER_db_absolute_path_on_host = "/mnt/sda1/michall/db/AMRfider_plus"
-params.metaphlan_db_absolute_path_on_host = "/mnt/sda1/michall/db/Metaphlan"
-params.kmerfinder_db_absolute_path_on_host = "/mnt/sda1/michall/db/Kmerfinder/kmerfinder_db"
-params.kraken2_db_absolute_path_on_host = "/home/michall/kraken2/kraken2_db/kraken2_sdb/"
+params.kraken2_db_absolute_path_on_host = "/mnt/sda1/michall/db_kraken/kraken2_db/kraken2_sdb/"
 
 // Print information that this pipeline works only for for 3 pre-defined genra
 
@@ -1449,7 +1446,7 @@ process run_metaphlan_illumina {
   tag "Run Metaphlan for sample:${x}"
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/metaphlan", mode: 'copy', pattern: "report_metaphlan*"
-  containerOptions "--volume ${params.metaphlan_db_absolute_path_on_host}:/bowtie_db"
+  containerOptions "--volume ${db_absolute_path_on_host}/Metaphlan:/bowtie_db"
   maxForks 6
   cpus params.cpus
   input:
@@ -1480,7 +1477,7 @@ process run_kmerfinder_illumina {
   tag "kmerfinder:${x}"
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results.spa"
-  containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/Kmerfinder/kmerfinder_db:/kmerfinder_db"
   maxForks 5
   cpus params.cpus
   input:
@@ -2178,7 +2175,7 @@ process run_amrfinder {
   tag "Predicting microbial resistance with AMRfinder for sample $x"
   publishDir "pipeline_wyniki/${x}/AMRplus_fider", mode: 'copy', pattern: "AMRfinder*"
   publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'amrfinder.json'
-  containerOptions "--volume ${params.AMRFINDER_db_absolute_path_on_host}:/AMRfider"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/AMRfider_plus:/AMRfider"
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
@@ -2854,7 +2851,7 @@ process run_kmerfinder_nanopore {
   tag "kmerfinder:${x}"
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results.spa"
-  containerOptions "--volume ${params.kmerfinder_db_absolute_path_on_host}:/kmerfinder_db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/Kmerfinder/kmerfinder_db:/kmerfinder_db"
   maxForks 5
   cpus params.cpus
   input:
