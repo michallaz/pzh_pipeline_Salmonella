@@ -1446,7 +1446,7 @@ process run_metaphlan_illumina {
   tag "Run Metaphlan for sample:${x}"
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/metaphlan", mode: 'copy', pattern: "report_metaphlan*"
-  containerOptions "--volume ${db_absolute_path_on_host}/Metaphlan:/bowtie_db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/Metaphlan:/bowtie_db"
   maxForks 6
   cpus params.cpus
   input:
