@@ -6,7 +6,7 @@ params.genus = '' // Can be set up by a User.
 
 params.reads =''  // Must be set up by User, path to reads i.e. '/mnt/sda1/michall/Salmonella/*_R{1,2}_001.fastq.gz'. Required
 params.machine = '' // Can be set to either 'Illumina' or 'Nanopore'. Required
-params.main_image = "salmonella_illumina:2.0" // image name with programs used by this pipeline
+params.main_image = "salmonella_illumina:3.0" // 3.0 updated amrfinder to version 4+
 params.prokka_image = "staphb/prokka:latest" // prokka image (publicly available)
 
 // // API TOKEN for ENTEROBASE API 2.0. USER-specific for now this is my PRIVATE token.

@@ -12,7 +12,7 @@ RUN pip install ete3 numba numpy==1.23.4 biopython==1.73 psutil pysam cgecore pa
 ### Not sure why I choose these version of some libraries  
 
 RUN pip install scikit-learn 
-RUN pip install geodatasets geopandas plotly
+RUN pip install fiona==1.9.6 geodatasets geopandas plotly
 
 WORKDIR /usr/bin
 RUN ln -s python3 python
@@ -156,12 +156,12 @@ RUN git clone https://github.com/fenderglass/Flye ;\
 ###  NOT used by the pipeline, at least for now, but maybe in the future
 
 # WORKDIR /data
-RUN git clone https://github.com/marbl/canu.git ;\
-    cd /opt/docker/canu/src/ ;\
-    make ;\
-    sed -i 's/\$java = `command -v \$java`/\$java = `which \$java`/'  /opt/docker/canu/build/bin/../lib/perl5/site_perl/canu/Defaults.pm ;\
-    sed -i 's/--threads 2/--threads 1/g'  /opt/docker/canu/build/bin/../lib/perl5/site_perl/canu/Consensus.pm ;\
-    cd /opt/docker 
+# RUN git clone https://github.com/marbl/canu.git ;\
+#    cd /opt/docker/canu/src/ ;\
+#    make ;\
+#    sed -i 's/\$java = `command -v \$java`/\$java = `which \$java`/'  /opt/docker/canu/build/bin/../lib/perl5/site_perl/canu/Defaults.pm ;\
+#    sed -i 's/--threads 2/--threads 1/g'  /opt/docker/canu/build/bin/../lib/perl5/site_perl/canu/Consensus.pm ;\
+#    cd /opt/docker 
 
 ### canu ma problem z wykryciem javy przez blad w jego skrypcie
 ### /opt/docker/canu/build/bin/../lib/perl5/site_perl/canu/Defaults.pm
@@ -224,6 +224,7 @@ RUN cd /opt/docker ;\
 ## AMRFIDER
 RUN git clone https://github.com/ncbi/amr.git ;\
     cd /opt/docker/amr ;\
+    git reset --hard 25a3690 ;\
     make; make install ;\
     cd /opt/docker
 

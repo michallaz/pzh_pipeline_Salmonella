@@ -46,9 +46,14 @@ def main_program(status, input_file, output, error=""):
         # skladanie wlasciwego jsona
         json_output["program_data"] = []
         for antibiotic, czynniki in slownik.items():
+            if antibiotic == "EFFLUX":
+                antibiotic="Multidrug_efflux"
+                status="inny"
+            else:
+                status="oporny"
             tmp_dict = {}
             tmp_dict["antibiotic_name"] = antibiotic
-            tmp_dict["antibiotic_status"] = "oporny"
+            tmp_dict["antibiotic_status"] = status
             tmp_dict["antibiotic_resistance_data"] = []
             for czynnik in czynniki:
                 if czynnik[-1] == "gen":
