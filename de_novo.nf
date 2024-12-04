@@ -1166,7 +1166,7 @@ process run_VFDB {
   // Baza z czynnikami wirulencji w roznych bakteriach w tym salmonelli
   // Przygotowana baza z instrukcja jak ja przygotowac jest w /mnt/sda1/michall/db/VFDB/README
   container  = params.main_image
-  containerOptions '--volume /mnt/sda1/michall/db/VFDB:/db'
+  containerOptions "--volume ${params.db_absolute_path_on_host}/VFDB:/db"
   // Ponownie montujemy na sztyno do /db bo taka lokalizacje na sztywno ma wpisany moj skrypt
   tag "Predicting VirulenceFactors for sample $x"
   publishDir "pipeline_wyniki/${x}/VFDB/", mode: 'copy'
