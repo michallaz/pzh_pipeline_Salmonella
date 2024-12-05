@@ -18,6 +18,7 @@ params.prokka_image = "staphb/prokka:latest" // prokka image (publicly available
 
 params.cpus = 25
 params.memory = 25
+ExecutionDir = new File('.').absolutePath // all output in json should be relative to this path
 
 // Minimum requirements for pipeline to produce valid output for ALL modules
 
@@ -2536,9 +2537,11 @@ process merge_all_subjsons_illumina {
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}.json"
   input:
   tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), val(PATOTYP), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("reverse.json"), path("contaminations.json"), path("initial_MLST.json"), path("genome_file.json"), path("bacterial_genome.json")
+  val(ExecutionDir)
   output:
   path("${x}.json")
   script:
+  ExecutionDir = ExecutionDir.replace(".", "")
   """
   VERSION="SOME_VERSION"
   python /opt/docker/EToKi/externals/prepare_full_json.py --sistr_file sistr.json \
@@ -2560,7 +2563,8 @@ process merge_all_subjsons_illumina {
                                                           --genome_statistics_file bacterial_genome.json \
                                                           --genome_file genome_file.json \
                                                           --repo_version "\${VERSION}" \
-                                                          --output ${x}.json
+                                                          --output ${x}.json \
+                                                          --executiondir ${ExecutionDir}
   """
 
 }
@@ -3001,9 +3005,11 @@ process merge_all_subjsons_nanopore {
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}.json"
   input:
   tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), val(PATOTYP), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("contaminations.json"), path("initial_MLST.json"), path("genome_file.json"), path("bacterial_genome.json")
+  val(ExecutionDir)
   output:
   path("${x}.json")
   script:
+  ExecutionDir = ExecutionDir.replace(".", "")
   """
   VERSION="SOME_VERSION"
   python /opt/docker/EToKi/externals/prepare_full_json.py --sistr_file sistr.json \
@@ -3025,7 +3031,8 @@ process merge_all_subjsons_nanopore {
                                                           --genome_statistics_file bacterial_genome.json \
                                                           --genome_file genome_file.json \
                                                           --repo_version "\${VERSION}" \
-                                                          --output ${x}.json
+                                                          --output ${x}.json \
+                                                          --executiondir ${ExecutionDir}
   """
 
 
@@ -3372,7 +3379,7 @@ if(params.machine == 'Illumina') {
   
 
   channnel_to_json = channnel_to_json.join(initial_to_json, by : 0)
-  merge_all_subjsons_illumina(channnel_to_json)
+  merge_all_subjsons_illumina(channnel_to_json, ExecutionDir)
   // modul do zapisywania merge'u jsona  
 } else if (params.machine == 'Nanopore') {
   // Nanopore rozni sie tylko outputem kanalu fastqc 
@@ -3382,7 +3389,7 @@ if(params.machine == 'Illumina') {
   initial_to_json = initial_to_json.join(extract_final_stats_json,  by : 0) // extract_final_stats_json to explicite nazwany kanal wyjscia podczas wywolania modulu
   channnel_to_json = channnel_to_json.join(initial_to_json, by : 0)
 
-  merge_all_subjsons_nanopore(channnel_to_json)
+  merge_all_subjsons_nanopore(channnel_to_json, ExecutionDir)
 }
 
 }

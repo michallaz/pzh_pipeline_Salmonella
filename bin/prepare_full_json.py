@@ -47,6 +47,8 @@ import datetime
               type=click.Path(),  required=True)
 @click.option('-m', '--patotyp', help='[INPUT] String with all patotypes names predicted for a sample',
               type=str,  required=True)
+@click.option('-w', '--executiondir', help='[INPUT] String with execution path of the program',
+              type=str,  required=True)
 @click.option('-l', '--repo_version', help='[INPUT] Version of a repository',
               type=str,  required=True)
 @click.option('-z', '--output', help='[Output] Name of a file with json output',
@@ -54,11 +56,12 @@ import datetime
 def main_program(sistr_file, seqsero_file, spifinder_file,  ectyper_file,  virulencefinder_file,  vfdb_file,
                  plasmidfinder_file, amrfinder_file, resfinder_file,  cgmlst_file, mlst_file,  fastqc_forward_file,
                  fastqc_reverse_file, contaminations_file, initial_mlst_file, genome_file, patotyp,
-                 genome_statistics_file, repo_version,output):
+                 genome_statistics_file, repo_version, executiondir, output):
 
     json_output = {}
     json_output["output"] = {}
     json_output["output"]["pathogen"] = "bacteria"
+    json_output["output"]["ExecutionDir"] = executiondir
     json_output["output"]["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     json_output["output"]["pipeline_version"] = repo_version
     json_output["output"]["genome_files_data"] = json.load(open(genome_file))
