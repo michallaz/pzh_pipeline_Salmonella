@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import json
 import sys
 import click
@@ -44,7 +45,8 @@ def main_program(input_kraken, input_metaphlan_genera, input_metaphlan_species, 
                 line = line.split()
                 if line[3] == "S":
                     try:
-                        species_dict[line[5] + " " + line[6]] = float(line[0])
+                        species_dict[" ".join(list(map(str, line[5:])))] = float(line[0])
+                        #species_dict[line[5] + " " + line[6]] = float(line[0])
                     except IndexError:
                         species_dict[line[5]] = float(line[0])
                 elif line[3] == "G":
@@ -57,10 +59,11 @@ def main_program(input_kraken, input_metaphlan_genera, input_metaphlan_species, 
                             "secondary_genus_name": genus_names_sorted[1],
                             "main_species_name": species_names_sorted[0],
                             "secondary_species_name": species_names_sorted[1],
-                            "main_genus_value": f'{genus_dict[genus_names_sorted[0]]:.2f}',
-                            "secondary_genus_value": f'{genus_dict[genus_names_sorted[1]]:.2f}',
-                            "main_species_value": f'{species_dict[species_names_sorted[0]]:.2f}',
-                            "secondary_species_value": f'{species_dict[species_names_sorted[1]]:.2f}'}
+                            "main_genus_value": round(genus_dict[genus_names_sorted[0]], 2),
+                            "secondary_genus_value": round(genus_dict[genus_names_sorted[1]], 2),
+                            "main_species_value": round(species_dict[species_names_sorted[0]], 2),
+                            "secondary_species_value": round(species_dict[species_names_sorted[1]], 2)}
+
         full_output.append(kraken2_json)
 
     # Metaphlan results section
@@ -100,10 +103,11 @@ def main_program(input_kraken, input_metaphlan_genera, input_metaphlan_species, 
                               "secondary_genus_name": genus_names_sorted[1],
                               "main_species_name": species_names_sorted[0],
                               "secondary_species_name": species_names_sorted[1],
-                              "main_genus_value": f'{genus_dict[genus_names_sorted[0]]:.2f}',
-                              "secondary_genus_value": f'{genus_dict[genus_names_sorted[1]]:.2f}',
-                              "main_species_value": f'{species_dict[species_names_sorted[0]]:.2f}',
-                              "secondary_species_value": f'{species_dict[species_names_sorted[1]]:.2f}'}
+                              "main_genus_value": round(genus_dict[genus_names_sorted[0]], 2),
+                              "secondary_genus_value": round(genus_dict[genus_names_sorted[1]], 2),
+                              "main_species_value": round(species_dict[species_names_sorted[0]], 2),
+                              "secondary_species_value": round(species_dict[species_names_sorted[1]], 2)}
+
         full_output.append(metaphlan_json)
     # Kmerfinder
     if input_kmerfinder == "skip":
@@ -148,8 +152,9 @@ def main_program(input_kraken, input_metaphlan_genera, input_metaphlan_species, 
                                "status": "tak",
                                "main_species_name": species_names_sorted[0],
                                "secondary_species_name": species_names_sorted[1],
-                               "main_species_coverage": f'{species_dict[species_names_sorted[0]]:.2f}',
-                               "secondary_species_coverage": f'{species_dict[species_names_sorted[1]]:.2f}'}
+                               "main_species_coverage": round(species_dict[species_names_sorted[0]], 2),
+                               "secondary_species_coverage": round(species_dict[species_names_sorted[1]], 2)}
+
 
         full_output.append(kmerfinder_json)
 
