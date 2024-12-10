@@ -61,7 +61,7 @@ def main_program(sistr_file, seqsero_file, spifinder_file,  ectyper_file,  virul
     json_output = {}
     json_output["output"] = {}
     json_output["output"]["pathogen"] = "bacteria"
-    json_output["output"]["ExecutionDir"] = executiondir
+    json_output["output"]["ExecutionDir_dir"] = executiondir
     json_output["output"]["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     json_output["output"]["pipeline_version"] = repo_version
     json_output["output"]["genome_files_data"] = json.load(open(genome_file))
