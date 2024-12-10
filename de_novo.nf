@@ -1991,7 +1991,7 @@ with open('parsed_phiercc_enterobase.txt') as f1, open('enterobase.json', 'w') a
 
     to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
                "hiercc_historical_data" : [{"level" : phiercc_level_userdefined,
-                                            "data_path" : "pipeline_wyniki/${x}/enterobase_historical_data.txt"}]}
+                                            "data_file" : "pipeline_wyniki/${x}/enterobase_historical_data.txt"}]}
     f2.write(json.dumps(to_dump))
 """
 }
@@ -2136,7 +2136,7 @@ with open('parsed_phiercc_pubmlst.txt') as f1, open('pubmlst.json', 'w') as f2:
 
     to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
                "hiercc_historical_data" : [{"level" : phiercc_level_userdefined,
-               "data_path" : "pipeline_wyniki/${x}/pubmlst_historical_data.txt"}]}
+               "data_file" : "pipeline_wyniki/${x}/pubmlst_historical_data.txt"}]}
     f2.write(json.dumps(to_dump))
 """
 }
