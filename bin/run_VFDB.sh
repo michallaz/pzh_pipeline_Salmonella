@@ -58,7 +58,7 @@ do
 		QLEN_END=`cat tmp | sort -rnk9 | head -1 | cut -f4`
 		QLEN_START=`cat tmp | sort -rnk9 | head -1 | cut -f3`
 		COV=`echo "(${QLEN_END} - ${QLEN_START} + 1)/${QLEN} * 100" | bc -l`
-		echo -e "Dla ${K} zapisuje ${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}"
+		#echo -e "Dla ${K} zapisuje ${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}"
 		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}\t${SEQ_ID}\t${COV}\t${REF_NAME}\tONE_HIT" >> VFDB_summary.txt
 
 	elif [ ${ILE} -gt 1 ]; then
@@ -70,7 +70,7 @@ do
                 QLEN_END=`cat tmp | sort -rnk9 | head -1 | cut -f4`
                 QLEN_START=`cat tmp | sort -rnk9 | head -1 | cut -f3`
 		COV=`echo "(${QLEN_END} - ${QLEN_START} + 1)/${QLEN} * 100" | bc -l`
-		echo -e "Dla ${K} zapisuje wielohitowej ${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}"
+		# echo -e "Dla ${K} zapisuje wielohitowej ${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}"
 		echo -e "${ORG}\t${VF}\t${VFC}\t${GEN}\t${NAZWA}\t${SEQ_ID}\t${COV}\t${REF_NAME}\tMULTIPLE_HITS" >> VFDB_summary.txt
 	fi
 	rm blastn_tmp.tab

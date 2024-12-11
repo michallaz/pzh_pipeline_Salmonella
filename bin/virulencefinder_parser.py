@@ -34,9 +34,13 @@ def main_program(status, input_file, output, error=""):
 
                     coverage_template, coverage_query = coverage.split("/")
                     coverage = float(coverage_template)/ float(coverage_query) * 100
+                    if coverage > 100:
+                        # Ten sam workaround co w spifinder
+                        coverage=100
                     virulence_genes_data.append({"gene_name" : gene_name,
                                                  "sequence_similarity_to_reference_value" : seq_identity,
                                                  "degree_of_overlap_with_reference_value" : round(coverage, 2),
+                                                 "contig_name" : contig_name,
                                                  "reference_accession_name" : reference_name})
         json_output["virulence_genes_data"] = virulence_genes_data
 
