@@ -225,6 +225,8 @@ RUN cd /opt/docker ;\
 RUN git clone https://github.com/ncbi/amr.git ;\
     cd /opt/docker/amr ;\
     git reset --hard 25a3690 ;\
+    git checkout stxtype ;\
+    git submodule update --init ;\
     make; make install ;\
     cd /opt/docker
 

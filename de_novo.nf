@@ -89,7 +89,7 @@ process run_fastqc_illumina {
   tag "fastqc for sample ${x}"
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
+  // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
   maxForks 5
   input:
   tuple val(x), path(reads), val(QC_STATUS)
@@ -135,7 +135,7 @@ process run_fastqc_nanopore {
   tag "fastqc for sample ${x}"
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
+  //publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
   maxForks 5
   input:
   tuple val(x), path(reads), val(QC_STATUS)
@@ -216,7 +216,7 @@ process run_initial_mlst_illumina {
   // oraz jesli liczba unikalnych loci nie wynosi co najmniej 5 (parametr params.unique_loci) 
   container  = params.main_image
   tag "Initial MLST for sample $x"
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "initial_mlst.json"
+  // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "initial_mlst.json"
   maxForks 10
   input:
   tuple val(x), path(reads), val(SPECIES), val(GENUS), val(QC_status)
@@ -399,7 +399,7 @@ process extract_final_contigs {
   // Modukl przekazuje bez mozliwosci zmiany QC_stauts
   container  = params.main_image
   tag "Coverage-based filtering for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy'
+  // publishDir "pipeline_wyniki/${x}", mode: 'copy'
   maxForks 5
   input:
   tuple val(x), path(bam1), path('genomic_fasta.fasta'), val(QC_status)
@@ -427,8 +427,8 @@ process extract_final_contigs {
 process extract_final_stats {
   container  = params.main_image
   tag "Calculating basic statistics for sample $x"
-  publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*txt"
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "bacterial_genome_data.json"
+  // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*txt"
+  // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "bacterial_genome_data.json"
   input:
   tuple val(x), path(fasta), path(fasta_reject), val(QC_status), val(GENUS)
   output:
@@ -515,8 +515,8 @@ process parse_7MLST {
   container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Parsing MLST for sample $x"
-  publishDir "pipeline_wyniki/${x}/MLST", mode: 'copy', pattern: 'MLST*txt'
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'MLST.json'
+  // publishDir "pipeline_wyniki/${x}/MLST", mode: 'copy', pattern: 'MLST*txt'
+  // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'MLST.json'
   maxForks 1
   input:
   tuple val(x), path('MLSTout.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations) 
@@ -687,8 +687,8 @@ process run_Seqsero {
   // SeqSero only works for Salmonella
   container  =  params.main_image
   tag "Predicting OH for sample $x with Seqsero"
-  publishDir "pipeline_wyniki/${x}/seqsero", mode: 'copy',  pattern: "seqsero/SeqSero_result.txt"
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "seqsero.json"
+  // publishDir "pipeline_wyniki/${x}/seqsero", mode: 'copy',  pattern: "seqsero/SeqSero_result.txt"
+  // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "seqsero.json"
   cpus params.cpus
   maxForks 15
   input:
@@ -732,8 +732,8 @@ process run_sistr {
   // Sistr works only for Salmonella
   container  =  params.main_image
   tag "Predicting OH for sample $x with Sistr"
-  publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy', pattern: "sistr-output.tab"
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "sistr.json"
+  // publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy', pattern: "sistr-output.tab"
+  // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "sistr.json"
   cpus params.cpus
   maxForks 15
   input:
@@ -757,7 +757,7 @@ process run_sistr {
   // ponadto w katalogu /usr/local/lib/python3.8/dist-packages/sistr/ musi byc plik dbstatus.txt
   // bo jak go nie ma to sistr_cmd dalej wymusza sciaganie bazy
   """
- if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
+  if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
     # json na zle QC
     touch sistr-output.tab
     ERR_MSG="This module was eneterd with failed QC and poduced no valid output"
@@ -780,8 +780,8 @@ process run_ectyper {
   // This process works only for Escherichia
   container  = params.main_image
   tag "Predicting OH for sample $x with ectyper"
-  publishDir "pipeline_wyniki/${x}/ECTyper", mode: 'copy'
-  publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "ectyper.json"
+  // publishDir "pipeline_wyniki/${x}/ECTyper", mode: 'copy'
+  // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "ectyper.json"
   cpus params.cpus
   maxForks 15
   input:

@@ -26,17 +26,17 @@ def main_program(status, input_file, output, error=""):
         slownik = {}
         header, body = open(input_file).readlines()
         line = body.rstrip().split("\t")
-        h1_antygen = line[8]
+        h1_antygen = line[9]
         h1_antigen_data = []
         for element in h1_antygen.split(","):
             h1_antigen_data.append({"antigen_id": element})
 
-        h2_antygen = line[9]
+        h2_antygen = line[10]
         h2_antigen_data = []
         for element in h2_antygen.split(","):
             h2_antigen_data.append({"antigen_id": element})
 
-        o_antigen = line[10]
+        o_antigen = line[11]
         o_antigen_data = []
         for element in o_antigen.split(","):
             o_antigen_data.append({"antigen_id" : element})
