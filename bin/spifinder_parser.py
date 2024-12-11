@@ -34,6 +34,12 @@ def main_program(status, input_file, output, error=""):
 
                     coverage_template, coverage_query = coverage.split("/")
                     coverage = float(coverage_template)/ float(coverage_query) * 100
+                    if coverage > 100:
+                        #  w output spifinder nie mamy dostepy do granic mapowan, tylko info jaka jest dlugosc query
+                        #  stad jesli query ma insercje wzgeledm template jego dlugosc moze byc wieksza od dlugosci
+                        #  template i dostaniemy wartosc > 100. Json tego nie zaakceptuje wiec w takiej sytuacji na
+                        # na sztywno daje 100
+                        coverage = 100
                     spi_data.append({"spi_name" : spi_name,
                                       "sequence_similarity_to_reference_value" : seq_identity,
                                       "degree_of_overlap_with_reference_value" : round(coverage, 2),
