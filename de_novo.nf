@@ -2131,7 +2131,7 @@ list_withphiercc_to_dump = []
 with open('parsed_phiercc_pubmlst.txt') as f1, open('pubmlst.json', 'w') as f2:
     naglowek, wartosci = f1.readlines()
     for level_name, level_value in zip(naglowek.split("\\t")[1:], wartosci.split("\\t")[1:]):
-        list_withphiercc_to_dump.append({"level": level_name.rstrip(),
+        list_withphiercc_to_dump.append({"level": re.findall("\\d+", level_name.rstrip())[0],
                                          "group_id": level_value.rstrip()})
 
     to_dump = {"hiercc_clustering_external_data" : list_withphiercc_to_dump,
