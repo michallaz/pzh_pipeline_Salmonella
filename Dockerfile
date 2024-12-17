@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 RUN apt-get update --fix-missing && apt upgrade -y && \
-    apt-get install build-essential pkgconf python3.8 python3-pip default-jre curl unzip wget vim bc htop git gcc zlib1g-dev libbz2-dev libcurl4-gnutls-dev libssl-dev liblzma-dev python3-pycurl screen iqtree -y
+    apt-get install build-essential pkgconf python3.8 python3-pip default-jre curl unzip wget vim bc htop git gcc zlib1g-dev libbz2-dev libcurl4-gnutls-dev libssl-dev liblzma-dev python3-pycurl screen iqtree mash -y
 
 RUN pip install ete3 numba numpy==1.23.4 biopython==1.73 psutil pysam cgecore packaging tables==3.7.0 h5py xlrd 
 ### xlrd - allows to read excels, need that for VFDB
@@ -231,16 +231,18 @@ RUN git clone https://github.com/ncbi/amr.git ;\
     cd /opt/docker
 
 # ECTyper
-
+# Fixed version 2.0 commit 21f2cbd
 RUN git clone https://github.com/phac-nml/ecoli_serotyping.git ;\
     cd /opt/docker/ecoli_serotyping ;\
-    python3 setup.py install ;\
+    git reset --hard 21f2cbd ;\
+    pip3 install . ;\
+    ectyper_init ;\
     cd /opt/docker
 
-## ECTyper databases
+## ECTyper databases, obsolete used by ectyper v.1.0
 
-RUN wget -O /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/assembly_summary_refseq.txt http://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt ;\  
-   wget -O  /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/refseq.genomes.k21s1000.msh https://gembox.cbcb.umd.edu/mash/refseq.genomes.k21s1000.msh
+#RUN wget -O /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/assembly_summary_refseq.txt http://ftp.ncbi.nlm.nih.gov/genomes/ASSEMBLY_REPORTS/assembly_summary_refseq.txt ;\  
+#    wget -O  /usr/local/lib/python3.8/dist-packages/ectyper-1.0.0-py3.8.egg/ectyper/Data/refseq.genomes.k21s1000.msh https://gembox.cbcb.umd.edu/mash/refseq.genomes.k21s1000.msh
 
 
 # Custom scripts 

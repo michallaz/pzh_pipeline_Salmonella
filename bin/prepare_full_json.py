@@ -36,6 +36,9 @@ import datetime
 @click.option('-f', '--contaminations_file', help='[INPUT] a path to an input file with json containing'
                                                   ' summary of get_specied workflow',
               type=click.Path(),  required=True)
+@click.option('--genus_species_file', help='[INPUT] a path to an input file with json containing'
+                                                  'infor regading genus and species predicted for a sample',
+              type=click.Path(),  required=True)
 @click.option('-g', '--initial_mlst_file', help='[INPUT] a path to an input file with json for mlst '
                                                 'prediction on raw fastq files',
               type=click.Path(),  required=True)
@@ -55,12 +58,14 @@ import datetime
               type=str,  required=True)
 def main_program(sistr_file, seqsero_file, spifinder_file,  ectyper_file,  virulencefinder_file,  vfdb_file,
                  plasmidfinder_file, amrfinder_file, resfinder_file,  cgmlst_file, mlst_file,  fastqc_forward_file,
-                 fastqc_reverse_file, contaminations_file, initial_mlst_file, genome_file, patotyp,
+                 fastqc_reverse_file, contaminations_file, genus_species_file, initial_mlst_file, genome_file, patotyp,
                  genome_statistics_file, repo_version, executiondir, output):
 
     json_output = {}
     json_output["output"] = {}
     json_output["output"]["pathogen"] = "bacteria"
+    json_output["output"]["pathogen_predicted_genus"] = json.load(open(genus_species_file))['pathogen_predicted_genus']
+    json_output["output"]["pathogen_predicted_species"] = json.load(open(genus_species_file))['pathogen_predicted_species']
     json_output["output"]["ExecutionDir_dir"] = executiondir
     json_output["output"]["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     json_output["output"]["pipeline_version"] = repo_version

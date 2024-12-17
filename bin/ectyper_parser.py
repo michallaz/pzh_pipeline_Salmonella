@@ -26,17 +26,17 @@ def main_program(status, input_file, output, error=""):
         slownik = {}
         header, body = open(input_file).readlines()
         line = body.rstrip().split("\t")
-        h_antygen = line[3]
+        h_antygen = line[6]
         h_antigen_data = []
-        for element in h_antygen.split(","):
+        for element in h_antygen.split("/"):
             h_antigen_data.append({"antigen_id": element})
 
 
-        o_antigen = line[2]
+        o_antigen = line[5]
         o_antigen_data = []
-        for element in o_antigen.split(","):
+        for element in o_antigen.split("/"):
             o_antigen_data.append({"antigen_id" : element})
-        serovar_antigen = line[5]
+        serovar_antigen = line[7]
         json_output = {"program_name": "ectyper",
                        "status": status,
                        "serotype_name" : serovar_antigen,
