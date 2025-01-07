@@ -15,8 +15,7 @@ params.prokka_image = "staphb/prokka:latest" // prokka image (publicly available
 // Number of cpus and memory assigned to a sample
 // these parameters are only used when a given program/module allows to specify CPU/RAM usage
 
-params.threads = 25
-params.memory = 25
+params.threads = 40 \\ for A100
 ExecutionDir = new File('.').absolutePath // all output in json should be relative to this path
 
 // Minimum requirements for pipeline to produce valid output for ALL modules
@@ -87,7 +86,7 @@ process run_fastqc_illumina {
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
   cpus { params.threads > 15 ? 15 : params.threads }
-  memory params.memory
+  memory "10 GB"
   input:
   tuple val(x), path(reads), val(QC_STATUS)
   output:
@@ -109,11 +108,11 @@ process run_fastqc_illumina {
     ERROR_MSG=""
   fi
    
-  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m ${params.memory} -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
+  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m 8096 -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
   STATUS_FORWARD_ALL="\${DANE_FORWARD[0]}"
   BASES_FORWARD="\${DANE_FORWARD[1]}"
 
-  DANE_REVERSE=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m ${params.memory} -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`)
+  DANE_REVERSE=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m 8096 -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`)
   STATUS_REVERSE_ALL="\${DANE_REVERSE[0]}"
   BASES_REVERSE="\${DANE_REVERSE[1]}"
  
@@ -135,7 +134,7 @@ process run_fastqc_nanopore {
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
   //publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
   cpus { params.threads > 15 ? 15 : params.threads }
-  memory params.memory
+  memory "10 GB"
   input:
   tuple val(x), path(reads), val(QC_STATUS)
   output:
@@ -154,7 +153,7 @@ process run_fastqc_nanopore {
     ERROR_MSG=""
   fi
  
-  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads} -m ${params.memory} -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
+  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads} -m 8096 -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
   STATUS_FORWARD="\${DANE_FORWARD[0]}"
   TOTAL_BASES="\${DANE_FORWARD[1]}"
 
