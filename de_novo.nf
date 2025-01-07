@@ -1507,7 +1507,7 @@ process run_kmerfinder_illumina {
     SPECIES=""
     GENUS=""
   else
-    /opt/docker/kmerfinder/kmerfinder.py -i ${reads[0]} ${reads[1]} -o ./kmerfider_out -db /db/kmerfinder_db/bacteria/bacteria.ATG -tax /db/kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+    /opt/docker/kmerfinder/kmerfinder.py -i ${reads[0]} ${reads[1]} -o ./kmerfider_out -db /db/kmerfinder/kmerfinder_db/bacteria/bacteria.ATG -tax /db/kmerfinder/kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
     cp kmerfider_out/results.spa .
     cp kmerfider_out/results.txt .
   
@@ -2910,7 +2910,7 @@ process run_kmerfinder_nanopore {
     SPECIES=""
     GENUS=""
   else
-    /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /db/kmerfinder_db/bacteria/bacteria.ATG -tax /db/kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+    /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /db/kmerfinder/kmerfinder_db/bacteria/bacteria.ATG -tax /db/kmerfinder/kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
     cp kmerfider_out/results.spa .
     cp kmerfider_out/results.txt .
   
