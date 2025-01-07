@@ -15,7 +15,7 @@ params.prokka_image = "staphb/prokka:latest" // prokka image (publicly available
 // Number of cpus and memory assigned to a sample
 // these parameters are only used when a given program/module allows to specify CPU/RAM usage
 
-params.threads = 40 \\ for A100
+params.threads = 40 // for A100
 ExecutionDir = new File('.').absolutePath // all output in json should be relative to this path
 
 // Minimum requirements for pipeline to produce valid output for ALL modules
