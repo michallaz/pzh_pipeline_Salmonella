@@ -12,11 +12,10 @@ params.prokka_image = "staphb/prokka:latest" // prokka image (publicly available
 // // API TOKEN for ENTEROBASE API 2.0. USER-specific for now this is my PRIVATE token.
 // params.enterobase_api_token = "" // This parameter was pushed for security reason to ./nextflow/config
 
-
 // Number of cpus and memory assigned to a sample
 // these parameters are only used when a given program/module allows to specify CPU/RAM usage
 
-params.cpus = 25
+params.threads = 25
 params.memory = 25
 ExecutionDir = new File('.').absolutePath // all output in json should be relative to this path
 
@@ -68,20 +67,17 @@ params.min_coverage_value = 20 // Second requirment for a contig to pass filter 
 // Paths to ia PREDEFINED structure of /db directory
 // Databases for ALL available species
 
-params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
-params.kraken2_db_absolute_path_on_host = "/mnt/sda1/michall/db_kraken/kraken2_db/kraken2_sdb/"
+params.db_absolute_path_on_host="/mnt/md0/external_databases"  // na A100
+// params.kraken2_db_absolute_path_on_host = "/mnt/sda1/michall/db_kraken/kraken2_db/kraken2_sdb/"
 
 // Print information that this pipeline works only for for 3 pre-defined genra
 
 if ( params.genus  == 'Salmonella' || params.genus  == 'Escherichia' || params.genus == 'Campylobacter') {
-    // params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
     println("The program auto-detects genera, thus if Salmonella, Escherichia, and Campylobacter is not detected")
     println("in provided sample(s), sub-programs will not execute, regardles of the genus that was provided by a user")
 } else {
-    // params.db_absolute_path_on_host="/mnt/sda1/michall/db/"
     println("This program is intended to work with following genera: Salmonella, Escherichia, and Campylobacter")
     println("It will continue but unless one of this genera is identified, sub-programs will not execute")
-    // System.exit(0)
 }
 
 
@@ -90,7 +86,8 @@ process run_fastqc_illumina {
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
-  maxForks 5
+  cpus { params.threads > 15 ? 15 : params.threads }
+  memory params.memory
   input:
   tuple val(x), path(reads), val(QC_STATUS)
   output:
@@ -107,15 +104,16 @@ process run_fastqc_illumina {
 
   if [ ${QC_STATUS} == "nie" ]; then
     ERROR_MSG="Initial QC received by this module was nie"
+    touch dummy.csv
   else
     ERROR_MSG=""
   fi
    
-  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m ${params.memory} -c ${params.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
+  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[0]} -m ${params.memory} -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
   STATUS_FORWARD_ALL="\${DANE_FORWARD[0]}"
   BASES_FORWARD="\${DANE_FORWARD[1]}"
 
-  DANE_REVERSE=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m ${params.memory} -c ${params.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`)
+  DANE_REVERSE=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads[1]} -m ${params.memory} -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o reverse.json`)
   STATUS_REVERSE_ALL="\${DANE_REVERSE[0]}"
   BASES_REVERSE="\${DANE_REVERSE[1]}"
  
@@ -136,7 +134,8 @@ process run_fastqc_nanopore {
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
   //publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
-  maxForks 5
+  cpus { params.threads > 15 ? 15 : params.threads }
+  memory params.memory
   input:
   tuple val(x), path(reads), val(QC_STATUS)
   output:
@@ -150,11 +149,12 @@ process run_fastqc_nanopore {
   """
   if [ ${QC_STATUS} == "nie" ]; then
     ERROR_MSG="Initial QC received by this module was nie"
+    touch dummy.csv
   else
     ERROR_MSG=""
   fi
  
-  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads} -m ${params.memory} -c ${params.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
+  DANE_FORWARD=(`python /opt/docker/EToKi/externals/run_fastqc_and_generate_json.py -i ${reads} -m ${params.memory} -c ${task.cpus} -x ${params.min_number_of_reads} -y ${params.min_median_quality} -s ${QC_STATUS} -r "\${ERROR_MSG}" -e pre-filtering -p "pipeline_wyniki/${x}/QC" -o forward.json`)
   STATUS_FORWARD="\${DANE_FORWARD[0]}"
   TOTAL_BASES="\${DANE_FORWARD[1]}"
 
@@ -175,7 +175,7 @@ process clean_fastq_illumina {
 
   container  = params.main_image
   tag "Fixing fastq dla sample $x"
-  maxForks 5
+  cpus { params.threads > 15 ? 15 : params.threads }
   input:
   tuple val(x), path(reads), val(QC_status)
   output:
@@ -191,7 +191,7 @@ process clean_fastq_illumina {
      touch prep_out_L1_R2.fastq.gz
      touch prep_out_L1_SE.fastq.gz
   else
-    python /opt/docker/EToKi/EToKi.py prepare --pe ${read_1},${read_2} -p prep_out -c ${params.cpus} -q ${params.quality}
+    python /opt/docker/EToKi/EToKi.py prepare --pe ${read_1},${read_2} -p prep_out -c ${task.cpus} -q ${params.quality}
     # w niektorych przypadkach plik SE moze byc pusty (bo pewnie ktos go wczesniej czyscil) 
     # Etoki sie gubi i nie generuje poprawnie pliku SE
     # tworzymy samodzilenie plik z dummy sekwencja tak by reszta skryptu dzialala
@@ -215,9 +215,11 @@ process run_initial_mlst_illumina {
   // Zmienia status z tak na nie jesli gatunek to cos innego niz Salmonellea, Campylo lub Ecoli
   // oraz jesli liczba unikalnych loci nie wynosi co najmniej 5 (parametr params.unique_loci) 
   container  = params.main_image
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1
   tag "Initial MLST for sample $x"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "initial_mlst.json"
-  maxForks 10
+  cpus 1
   input:
   tuple val(x), path(reads), val(SPECIES), val(GENUS), val(QC_status)
   output:
@@ -234,12 +236,12 @@ process run_initial_mlst_illumina {
     QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -s ${QC_status} -r "\${ERR_MSG}" -o initial_mlst.json`
   else
     if [[ "${GENUS}" == *"Salmo"* ]]; then
-      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
+      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s senterica -p /db/mlst_db/ -mp kma -t tmp/
     elif [[ "${GENUS}" == *"Escher"* ]]; then
-      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s ecoli -p /opt/docker/mlst_db/ -mp kma -t tmp/
+      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s ecoli -p /db/mlst_db/ -mp kma -t tmp/
     elif [ ${GENUS} == "Campylobacter" ]; then
       # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd .. 
-      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
+      python /opt/docker/mlst/mlst.py -i ${read_1} ${read_2} -s c${SPECIES} -p /db/mlst_db/ -mp kma -t tmp/
     else
       # We encountered wrong genus
       ERR_MSG=`echo This program is intended to work with following genera: Salmonella, Escherichia, and Campylobacter. Genus identified in this sample is: ${GENUS}`
@@ -262,10 +264,9 @@ process spades {
   // Funkcja do odpalania spadesa
   // Powstaly plik fasta jest poprawiany bo Hapo-G nie akceptuje "." w nazwach sekwencji w pliku fasta
   // Modul definiuje QC_status az do modulu extract_final_stats, gdzie status moze ulec zmianie
-  cpus params.cpus
+  cpus params.threads
   container  = params.main_image
   tag "Spades dla sample $x"
-  maxForks 5
   input:
   tuple val(x), path('R1.fastq.gz'), path('R2.fastq.gz'), path('SE.fastq.gz'), val(QC_status)
   output:
@@ -296,10 +297,9 @@ process spades {
 
 process bwa_paired {
   // Funkcja do mapowania odczytow Pair-end
-  cpus params.cpus
+  cpus params.threads
   container  = params.main_image
   tag "RE-mapowanie PE dla sample $x"
-  maxForks 5
   input:
   tuple val(x), path('genomic_fasta.fasta'), val(QC_status), path(read_1),  path(read_2)
   output:
@@ -319,10 +319,9 @@ process bwa_paired {
 
 process bwa_single {
   // Funkcja do mapowania odczytow Single-end na genom
-  cpus params.cpus
+  cpus params.threads
   container  = params.main_image
   tag "RE-mapowanie SE dla sample $x"
-  maxForks 5
   input:
   tuple val(x), path('genomic_fasta.fasta'), val(QC_status), path(reads)
   output:
@@ -344,6 +343,7 @@ process merge_bams {
   // Uzywany w workflow calculate_coverage
   container  = params.main_image
   tag "Merging bam files for sample $x"
+  cpus 1
   input:
   tuple val(x), path(bam1), path(bam2)
   output:
@@ -363,7 +363,7 @@ process run_pilon {
   // Dokladne uzycie pilona jest tu https://github.com/broadinstitute/pilon/wiki/Requirements-&-Usage
   container  = params.main_image
   tag "Pilon for sample $x"
-  maxForks 5
+  cpus params.threads
   // publishDir "pilon_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(bam1), path(bam2), path('genomic_fasta.fasta'), val(QC_status)
@@ -382,7 +382,7 @@ process run_pilon {
     /opt/docker/EToKi/externals/samtools index  $bam2
 
     # wywolanie pilon-a
-    java -jar /opt/docker/EToKi/externals/pilon.jar --threads ${params.cpus} --genome genomic_fasta.fasta --frags $bam1 --unpaired $bam2 --output pilon_polish --vcf --changes --outdir pilon_bwa
+    java -jar /opt/docker/EToKi/externals/pilon.jar --threads ${task.cpus} --genome genomic_fasta.fasta --frags $bam1 --unpaired $bam2 --output pilon_polish --vcf --changes --outdir pilon_bwa
  
     # przygotowanie outputu
     # cat pilon_bwa/pilon_polish.fasta | awk  -v ALA=${x} 'BEGIN{OFS=""}; {if(\$0 ~ />/) print \$0,"_", ALA; else print \$0}' >> last_pilon.fasta
@@ -400,7 +400,7 @@ process extract_final_contigs {
   container  = params.main_image
   tag "Coverage-based filtering for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
-  maxForks 5
+  cpus 1
   input:
   tuple val(x), path(bam1), path('genomic_fasta.fasta'), val(QC_status)
   output:
@@ -426,6 +426,7 @@ process extract_final_contigs {
 
 process extract_final_stats {
   container  = params.main_image
+  cpus 1
   tag "Calculating basic statistics for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*txt"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "bacterial_genome_data.json"
@@ -466,8 +467,9 @@ process extract_final_stats {
 
 process run_7MLST {
   container  = params.main_image
-  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/mlst:/db"
   tag "Predicting MLST for sample $x"
+  cpus 1
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
@@ -483,11 +485,11 @@ process run_7MLST {
   else
     CAMPYLO_SPECIES='concisus fetus helveticus hyointestinalis insulaenigrae jejuni lanienae lari sputorum upsaliensis'
     if [[ "${SPECIES}" == *"Salmo"* || "${SPECIES}" == *"Escher"* ]]; then
-      /opt/docker/EToKi/EToKi.py MLSTdb -i /db/${GENUS}/MLST_Achtman/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
+      /opt/docker/EToKi/EToKi.py MLSTdb -i /db/${GENUS}/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
       /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
     elif [[ \${CAMPYLO_SPECIES[@]} =~ "${SPECIES}" ]]; then
       # sciezka dla Campylobacter
-      /opt/docker/EToKi/EToKi.py MLSTdb -i /db/${GENUS}/${SPECIES}/MLST/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
+      /opt/docker/EToKi/EToKi.py MLSTdb -i /db/${GENUS}/${SPECIES}/all_allels.fasta -x 0.8 -m 0.5 -r MLST_Achtman_ref.fasta -d MLST_database.tab
      /opt/docker/EToKi/EToKi.py MLSType -i $fasta -r MLST_Achtman_ref.fasta -k ${x} -o MLSTout.txt -d MLST_database.tab
     else
        echo "Provided species ${SPECIES} is not part of any MLST databases" >> MLSTout.txt
@@ -513,11 +515,12 @@ process parse_7MLST {
   // // If the distance between between identified and expexted profiles is 0 (As indicated in MLST_parsed_output.txt) this file should be identical to MLST_sample_full_list_of_allels.txt
 
   container  = params.main_image
-  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/mlst:/db"
+  cpus 1
   tag "Parsing MLST for sample $x"
   // publishDir "pipeline_wyniki/${x}/MLST", mode: 'copy', pattern: 'MLST*txt'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'MLST.json'
-  maxForks 1
+  // maxForks 1 We will use delayed channel tactics to assure "novel" STs are correctly added to the file. THIS WILL NOT WORK WITH SLURM.
   input:
   tuple val(x), path('MLSTout.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations) 
   output:
@@ -562,9 +565,9 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
     sys.exit(0)
 
 if re.findall('Salmo', genus) or re.findall('Esch', genus):
-    sciezka=f'/db/{genus}/MLST_Achtman'
+    sciezka=f'/db/{genus}/'
 elif species in ['concisus','fetus','helveticus','hyointestinalis','insulaenigrae','jejuni','lanienae','lari','sputorum','upsaliensis']:
-    sciezka=f'/db/{genus}/{species}/MLST'
+    sciezka=f'/db/{genus}/{species}/'
 else:
     # To nie powinno sie nigdy wykonac bo gatunek jest switchem na QC w module run+initial_mlst
     # Ale gdyby jednak sie wykonywalo to znaczy ze jest cos nie tak z pipeline
@@ -689,8 +692,7 @@ process run_Seqsero {
   tag "Predicting OH for sample $x with Seqsero"
   // publishDir "pipeline_wyniki/${x}/seqsero", mode: 'copy',  pattern: "seqsero/SeqSero_result.txt"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "seqsero.json"
-  cpus params.cpus
-  maxForks 15
+  cpus { params.threads > 15 ? 15 : params.threads }
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
@@ -713,14 +715,14 @@ process run_Seqsero {
     #json na zle QC
   else
     if [ ${GENUS} == "Salmonella" ]; then
-      python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p 4 -i $fasta -d seqsero
+      python /opt/docker/SeqSero2/bin/SeqSero2_package.py -m k -t 4 -p ${task.cpus} -i $fasta -d seqsero
       python /opt/docker/EToKi/externals/seqsero_parser.py  -i seqsero/SeqSero_result.tsv -s "tak" -o seqsero.json
     else
       mkdir seqsero
       touch seqsero/SeqSero_result.txt
       ERR_MSG="This module works only with Salmonella"
       touch SeqSero_result.tsv
-      python /opt/docker/EToKi/externals/sistr_parser.py  -i SeqSero_result.tsv -s "nie" -r "\${ERR_MSG}" -o seqsero.json    
+      python /opt/docker/EToKi/externals/seqsero_parser.py  -i SeqSero_result.tsv -s "nie" -r "\${ERR_MSG}" -o seqsero.json    
       #json na zly gatunek
     fi # koniec if-a na zly gatunek
   fi # koniec if-a na zle QC
@@ -732,6 +734,7 @@ process run_sistr {
   // Sistr works only for Salmonella
   container  =  params.main_image
   tag "Predicting OH for sample $x with Sistr"
+  cpus { params.threads > 15 ? 15 : params.threads }
   // publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy', pattern: "sistr-output.tab"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "sistr.json"
   input:
@@ -762,7 +765,7 @@ process run_sistr {
     python /opt/docker/EToKi/externals/sistr_parser.py  -i sistr-output.tab -s "nie" -r "\${ERR_MSG}" -o sistr.json
   else
     if [ ${GENUS} == "Salmonella" ]; then
-      /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t 1 -o sistr-output.tab $fasta
+      /usr/local/bin/sistr --qc -vv --alleles-output allele-results.json --novel-alleles novel-alleles.fasta --cgmlst-profiles cgmlst-profiles.csv -f tab -t ${task.cpus} -o sistr-output.tab $fasta
       python /opt/docker/EToKi/externals/sistr_parser.py  -i sistr-output.tab -s "tak" -o sistr.json
     else
       # json na zly gatunek
@@ -777,6 +780,7 @@ process run_sistr {
 process run_ectyper {
   // This process works only for Escherichia
   container  = params.main_image
+  cpus { params.threads > 15 ? 5 : params.threads }
   tag "Predicting OH for sample $x with ectyper"
   // publishDir "pipeline_wyniki/${x}/ECTyper", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "ectyper.json"
@@ -804,7 +808,7 @@ process run_ectyper {
     python /opt/docker/EToKi/externals/ectyper_parser.py  -i output.tsv -s "nie" -r "\${ERR_MSG}" -o ectyper.json
   else
     if [ ${GENUS} == "Escherichia" ]; then
-      ectyper -i $fasta -c 1 -hpid 90 -o ectyper_out
+      ectyper -i $fasta -c ${task.cpus} -hpid 90 -o ectyper_out
       cp ectyper_out/output.tsv .
       python /opt/docker/EToKi/externals/ectyper_parser.py  -i output.tsv -s "tak" -o ectyper.json
     else
@@ -820,6 +824,9 @@ process run_ectyper {
 
 process run_resfinder {
   container  = params.main_image
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  
+  cpus 1
   tag "Predicting microbial resistance for sample $x"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/ResFinder_results_table.txt"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/pheno_table_*.txt"
@@ -866,15 +873,16 @@ process run_resfinder {
   else
 
     if [[ "${GENUS}" == *"Salmo"* ]]; then
-        python -m resfinder -o resfinder/ -s 'senterica'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
-        python /opt/docker/EToKi/externals/resfinder_parser.py  -i  resfinder/ResFinder_results_tab.txt -j resfinder/PointFinder_results.txt -s "tak" -o resfinder.json
+        resfinder_species="senterica"
     elif [[ "${GENUS}" == *"Escher"* ]]; then
-        python -m resfinder -o resfinder/ -s 'ecoli'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
-        python /opt/docker/EToKi/externals/resfinder_parser.py  -i  resfinder/ResFinder_results_tab.txt -j resfinder/PointFinder_results.txt -s "tak" -o resfinder.json
+        resfinder_species="ecoli"
     elif [ ${GENUS} == "Campylobacter" ]; then
-         python -m resfinder -o resfinder/ -s 'cjejuni'  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /opt/docker/disinfinder_db/ -db_res /opt/docker/resfinder_db/ -db_point /opt/docker/pointfinder_db/ -ifa ${fasta}
-         python /opt/docker/EToKi/externals/resfinder_parser.py  -i  resfinder/ResFinder_results_tab.txt -j resfinder/PointFinder_results.txt -s "tak" -o resfinder.json
+        resfinder_species="cjejuni"
     else
+        resfinder_species=""
+    fi
+
+    if [ -z \${resfinder_species} ]; then
       # Tworzenie json i dummy output
       mkdir resfinder
       cd resfinder
@@ -884,20 +892,22 @@ process run_resfinder {
       ERR_MSG="This module was eneterd with wrong genus: ${GENUS} and poduced no valid output"
       python /opt/docker/EToKi/externals/resfinder_parser.py  -i  ResFinder_results_tab.txt -j PointFinder_results.txt -s "nie" -r "\${ERR_MSG}" -o resfinder.json
       cp resfinder.json ../
-    fi # koniec if-a na gatunek przy zdanym QC 
- 
- fi # koniec if-a na status QC przekazany modulowi
+    else 
+      python -m resfinder -o resfinder/ -s \${resfinder_species}  -l 0.6 -t 0.8 --acquired --point -k /opt/docker/kma/kma -db_disinf /db/disinfinder_db -db_res /db/resfinder_db/ -db_point /db/pointfinder_db/ -ifa ${fasta}
+      python /opt/docker/EToKi/externals/resfinder_parser.py  -i  resfinder/ResFinder_results_tab.txt -j resfinder/PointFinder_results.txt -s "tak" -o resfinder.json
+    fi # koniec if-a na obslugiwany gatunek
+
+  fi # koniec if-a na status QC przekazany modulowi
  
   """
 }
 
 process run_cgMLST {
   container  = params.main_image
-  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/cgmlst:/db"
   tag "Predicting cgMLST for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
-  cpus params.cpus
-  maxForks 5
+  cpus params.threads
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output: 
@@ -912,11 +922,11 @@ process run_cgMLST {
     # json dla zlego QC
   else
     if [[ "${GENUS}" == *"Salmo"* ]]; then 
-         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/cgMLST_v2
+         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/
     elif [[ "${GENUS}" == *"Esche"* ]]; then
-         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/cgMLST_v1
+         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/
     elif [ "${SPECIES}" == "jejuni" ]; then
-         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/jejuni/cgMLST_v2
+         /data/run_blastn_ver11.sh $fasta ${task.cpus} /db/${GENUS}/jejuni/
     else
          # This should never happen
          echo "Provided species $SPECIES is not part of any cgMLST databases" >> log.log
@@ -929,11 +939,12 @@ process run_cgMLST {
 process parse_cgMLST {
   // Extracting ST given cgMLST profile, the output is identical to that from parse_7MLST
   container  = params.main_image
-  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/cgmlst:/db"
   tag "Parsing cgMLST for sample $x"
   publishDir "pipeline_wyniki/${x}/cgMLST", mode: 'copy', pattern: 'cgMLST*txt'
-  maxForks 1 // set to "1" thus we ensure that when multiple sequencing are analyzed we correctly assign cgST for each of the sample (if they are all new 
-  // and not part of the Enterobase
+  cpus 1
+  // maxForks 1 set to "1" thus we ensure that when multiple sequencing are analyzed we correctly assign cgST for each of the sample (if they are all new 
+  // and not part of the Enterobase We will use delayed channel tactics to assure "novel" STs are correctly added to the file. THIS WILL NOT WORK WITH SLURM.
   input:
   tuple val(x), path('cgMLST.txt'), path('cgMLST_all_identical_allels.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
@@ -974,11 +985,11 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
 
 
 if genus == 'Salmonella':
-    sciezka=f'/db/{genus}/cgMLST_v2'
+    sciezka=f'/db/{genus}/'
 elif genus == 'Escherichia':
-    sciezka=f'/db/{genus}/cgMLST_v1'
+    sciezka=f'/db/{genus}/'
 elif species == 'jejuni':
-    sciezka=f'/db/{genus}/jejuni/cgMLST_v2'
+    sciezka=f'/db/{genus}/jejuni/'
 else:
     # W odroznieniu od MLST to moze sie stac, bo mamy cgMLST tylko dla C.jejuni/coli
     with open('cgMLST_parsed_output.txt', 'w') as f1, open('cgMLST_sample_full_list_of_allels.txt', 'w') as f2, open('cgMLST_closest_ST_full_list_of_allels.txt', 'w') as f3:
@@ -1135,8 +1146,8 @@ process run_prokka {
   tag "Predicting genes for sample $x"
   // Do we really need prokka output in results dir ? 
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
-  cpus params.cpus
-  maxForks 5
+  cpus params.threads
+  // maxForks 5
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
@@ -1150,7 +1161,7 @@ process run_prokka {
     # json z informacja o bledzie jakosci
   else
     if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
-      prokka --metagenome --cpus ${params.cpus} --outdir prokka_out --prefix prokka_out --compliant --kingdom Bacteria $fasta 
+      prokka --metagenome --cpus ${task.cpus} --outdir prokka_out --prefix prokka_out --compliant --kingdom Bacteria $fasta 
     else
       mkdir prokka_out; touch prokka_out/prokka_out_dummy.gff; prokka_out/prokka_out_dummy.ffa; prokka_out/prokka_out_dummy.ffn; prokka_out/prokka_out_dummy.tsv
       # json z informacja o zlym gatunku
@@ -1164,13 +1175,13 @@ process run_VFDB {
   // Baza z czynnikami wirulencji w roznych bakteriach w tym salmonelli
   // Przygotowana baza z instrukcja jak ja przygotowac jest w /mnt/sda1/michall/db/VFDB/README
   container  = params.main_image
-  containerOptions "--volume ${params.db_absolute_path_on_host}/VFDB:/db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/vfdb:/db"
   // Ponownie montujemy na sztyno do /db bo taka lokalizacje na sztywno ma wpisany moj skrypt
   tag "Predicting VirulenceFactors for sample $x"
   // publishDir "pipeline_wyniki/${x}/VFDB/", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "vfdb.json"
-  cpus params.cpus
-  maxForks 5
+  cpus params.threads
+  // maxForks 5
   input:
   // inputem jest output procesu run_prokka
   tuple val(x), path(gff), path(faa), path(ffn), path(tsv), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
@@ -1230,7 +1241,7 @@ process parse_VFDB_ecoli {
   // Parser wynikow dla E.coli w celu okreslenia czy jest to STEC/VTEC itd ...
   tag "Predicting phenotype for sample $x"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy'
-  cpus params.cpus
+  cpus 1
   input:
   tuple val(x), path('VFDB_summary_Escherichia.txt'), path('VFDB_summary_Shigella.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
   output:
@@ -1347,6 +1358,7 @@ process parse_VFDB_ecoli {
 process run_spifinder {
   // works only for salmonella
   container  = params.main_image
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   tag "Predicting virulence islands for sample $x"
   // publishDir "pipeline_wyniki/${x}/spifinder", mode: 'copy', pattern: "results_tab.tsv"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "spifinder.json"
@@ -1363,7 +1375,7 @@ process run_spifinder {
   """
   mkdir spifinder_results # program wymaga tworzenia katalogu samodzielnie
   # -mp opcja jak szukamy wysp kma jest gdy inputem sa dane surowe, blastn gdy podajemy zlozony genom/contigi
-  # -p sciezka do bazy, sciagana w trakcie budowy kontenera
+  # -p sciezka do bazy w external_databases
   # -l i -t to parametrty na alignment coverage i seq id
   # -x to rozszerzony output
 
@@ -1374,7 +1386,7 @@ process run_spifinder {
     # json na zle QC
   else
     if [ ${GENUS} == "Salmonella" ]; then
-      python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /opt/docker/spifinder_db/ -l 0.6 -t 0.9 -x
+      python /opt/docker/spifinder/spifinder.py -i $fasta -o spifinder_results -mp blastn -p /db/spifinder_db/ -l 0.6 -t 0.9 -x
       python /opt/docker/EToKi/externals/spifinder_parser.py  -i spifinder_results/results_tab.tsv  -s "tak" -o spifinder.json
     else
       touch spifinder_results/results_tab.tsv
@@ -1388,7 +1400,6 @@ process run_spifinder {
 }
 
 
-
 process run_kraken2_illumina {
   // kraken2 instalowany jest przez ETOKI i jest w path kontenera do salmonelli
   tag "Run kraken2 for sample:${x}"
@@ -1396,8 +1407,9 @@ process run_kraken2_illumina {
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken_*.txt"
-  containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
-  maxForks 6
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus params.threads
+  memory '80 GB'
 
   input:
   tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
@@ -1414,9 +1426,9 @@ process run_kraken2_illumina {
     touch Summary_kraken_genera.txt
     touch Summary_kraken_species.txt
   else
-    kraken2 --db /home/external_databases/kraken2 \
+    kraken2 --db /db/kraken2 \
             --report report_kraken2.txt \
-            --threads ${params.cpus} \
+            --threads ${task.cpus} \
             --gzip-compressed \
             --minimum-base-quality ${params.quality} \
             --use-names ${reads[0]} ${reads[1]} >> report_kraken2_individualreads.txt 2>&1
@@ -1444,9 +1456,10 @@ process run_metaphlan_illumina {
   tag "Run Metaphlan for sample:${x}"
   container  = params.main_image
   // publishDir "pipeline_wyniki/${x}/metaphlan", mode: 'copy', pattern: "report_metaphlan*"
-  containerOptions "--volume ${params.db_absolute_path_on_host}/Metaphlan:/bowtie_db"
-  maxForks 6
-  cpus params.cpus
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus params.threads
+  memory '25 GB'
+
   input:
   tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
 
@@ -1461,11 +1474,11 @@ process run_metaphlan_illumina {
     touch report_metaphlan_species.txt
     touch report_metaphlan_genera.txt
   else
-    metaphlan ${reads[0]},${reads[1]} --bowtie2out metagenome.bowtie2.bz2 --nproc ${task.cpus} --input_type fastq -o profiled_metagenome.txt --bowtie2db /bowtie_db/ --unclassified_estimation
+    metaphlan ${reads[0]},${reads[1]} --bowtie2out metagenome.bowtie2.bz2 --nproc ${task.cpus} --input_type fastq -o profiled_metagenome.txt --bowtie2db /db/metaphlan/ --unclassified_estimation
     # Parsujemy wyniki
-    metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /bowtie_db/  --nproc ${task.cpus} --tax_lev 't' -o report_metaphlan_SGB.txt
-    metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /bowtie_db/  --nproc ${task.cpus} --tax_lev 's' -o report_metaphlan_species.txt
-    metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /bowtie_db/  --nproc ${task.cpus} --tax_lev 'g' -o report_metaphlan_genera.txt
+    metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /db/metaphlan/  --nproc ${task.cpus} --tax_lev 't' -o report_metaphlan_SGB.txt
+    metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /db/metaphlan/  --nproc ${task.cpus} --tax_lev 's' -o report_metaphlan_species.txt
+    metaphlan metagenome.bowtie2.bz2 --input_type bowtie2out --bowtie2db /db/metaphlan/  --nproc ${task.cpus} --tax_lev 'g' -o report_metaphlan_genera.txt
   fi
   """
 }
@@ -1475,9 +1488,11 @@ process run_kmerfinder_illumina {
   tag "kmerfinder:${x}"
   container  = params.main_image
   // publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results.spa"
-  containerOptions "--volume ${params.db_absolute_path_on_host}/Kmerfinder/kmerfinder_db:/kmerfinder_db"
-  maxForks 5
-  cpus params.cpus
+  // containerOptions "--volume ${params.db_absolute_path_on_host}/Kmerfinder/kmerfinder_db:/kmerfinder_db"
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1
+  memory '10 GB'
+
   input:
   tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
 
@@ -1493,7 +1508,7 @@ process run_kmerfinder_illumina {
     SPECIES=""
     GENUS=""
   else
-    /opt/docker/kmerfinder/kmerfinder.py -i ${reads[0]} ${reads[1]} -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+    /opt/docker/kmerfinder/kmerfinder.py -i ${reads[0]} ${reads[1]} -o ./kmerfider_out -db /db/kmerfinder_db/bacteria/bacteria.ATG -tax /db/kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
     cp kmerfider_out/results.spa .
     cp kmerfider_out/results.txt .
   
@@ -1513,6 +1528,7 @@ process run_pHierCC_enterobase {
   errorStrategy 'retry' // in case there is aroblem with internet connection
   container  = params.main_image
   tag "Predicting hierCC from enterobase for sample $x"
+  cpus 1
   // publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
   tuple val(x), path('cgMLST_parsed_output.txt'), path('cgMLST_sample_full_list_of_allels.txt'), path('cgMLST_closest_ST_full_list_of_allels.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
@@ -1551,7 +1567,7 @@ if qc_status == "nie" or qc_status_contaminations == "nie":
     # json przerzucony jest do modulu extract_historical_data
     sys.exit(0)
 
-time.sleep(np.random.randint(2,20))
+# time.sleep(np.random.randint(2,20))
 
 API_TOKEN = "${params.enterobase_api_token}"
 
@@ -1615,8 +1631,10 @@ with open('parsed_phiercc_enterobase.txt', 'w') as f:
 }
 
 process run_pHierCC_pubmlst {
+  // For Pubmlst we cannot ask the website directly for phiercc-like level, we must query downloaded database 
   container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1
   tag "Predicting hierCC with local database for sample $x"
   publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
@@ -1675,7 +1693,7 @@ ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
 
 phiercc_header='ST\\tHC5\\tHC10\\tHC25\\tHC50\\tHC100\\tHC200\\n'
 lista_kluczy = ['d5', 'd10', 'd25', 'd50','d100', 'd200']
-directory=f'/db/{genus}/jejuni/pubmlst'
+directory=f'/db/pubmlst/{genus}/jejuni/'
 
 
 STs_data = np.load(f'{directory}/sts_table.npy', allow_pickle=True).item() 
@@ -1698,12 +1716,12 @@ with open('parsed_phiercc_pubmlst.txt', 'w') as f:
 }
 
 process run_pHierCC_local {
-  
-  // Ponadto Funkcja odpytuje dwa pliki przygotowane przeze mnie 
+  // Query results of local clustering using enterobaso r pubmlst data 
   // Jeden zawierajacy klastrowanie SINGLE linkage zbudowane na 430k profili z enterobase
   // Drugi zawierajacy klastrowanie COMPLETE linkage zbudowane na 430k profili z enterobae
   container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1
   tag "Predicting hierCC with local database for sample $x"
   // publishDir "pipeline_wyniki/${x}/pHierCC", mode: 'copy'
   input:
@@ -1757,18 +1775,18 @@ def getST(my_file):
 ST_sample, ST_matching, my_dist = getST('cgMLST_parsed_output.txt')
 
 if genus ==  'Salmonella':
-    directory=f'/db/{genus}/pHierCC_local'
+    directory=f'/db/phiercc_local/{genus}/'
     phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC900(ceBG)\\tHC2000\\tHC2600\\tHC2850(subsp.)\\n'
     lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd900', 'd2000', 'd2600', 'd2850']
 elif genus == 'Escherichia':
-    directory=f'/db/{genus}/pHierCC_local'
+    directory=f'/db/phiercc_local/{genus}/'
     phiercc_header='ST\\tHC0\\tHC2\\tHC5\\tHC10\\tHC20\\tHC50\\tHC100\\tHC200\\tHC400\\tHC1100(cgST Cplx)\\tHC1500\\tHC2000\\tHC2350(subsp.)\\n'
     lista_kluczy = ['d0', 'd2', 'd5', 'd10', 'd20', 'd50', 'd100', 'd200' , 'd400', 'd1100', 'd1500', 'd2000', 'd2350']
 elif species == 'jejuni':
     # Provisal selecetion of jejuni
     phiercc_header='ST\\tHC5\\tHC10\\tHC25\\tHC50\\tHC100\\tHC200\\n' 
     lista_kluczy = ['d5', 'd10', 'd25', 'd50', 'd100', 'd200']
-    directory=f'/db/{genus}/jejuni/pHierCC_local'
+    directory=f'/db/phiercc_local/{genus}/jejuni/'
 
 else:
     with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f1, open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f2:
@@ -1874,6 +1892,7 @@ process extract_historical_data_enterobase {
   tag "Extracting historical data for sample $x"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "enterobase_historical_data.txt"
+  cpus 1
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "enterobase.json"
   input:
   tuple val(x), path('parsed_phiercc_enterobase.txt'), val(SPECIES), val(GENUS),  val(QC_status), val(QC_status_contaminations)
@@ -1947,7 +1966,7 @@ except KeyError:
     print('Provided key does not exist')
     sys.exit(0)
 
-directory=f'/db/{genus}/Enterobase'
+directory=f'/db/enterobase/{genus}/'
 # Now we look for ALL STs belonging to the same cluster as our cluster given phiercc_level
 # for that we query our local enterobase instance
 expected_ST = {}
@@ -1995,6 +2014,7 @@ with open('parsed_phiercc_enterobase.txt') as f1, open('enterobase.json', 'w') a
 process plot_historical_data_enterobase {
   container  = params.main_image
   tag "Plot historical data for sample $x"
+  cpus 1
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
   tuple val(x), path('enterobase_historical_data.txt'), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
@@ -2031,6 +2051,7 @@ process extract_historical_data_pubmlst {
   container  = params.main_image
   tag "Extracting historical data for sample $x"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "pubmlst_historical_data.txt"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "pubmlst.json"
   input:
@@ -2092,7 +2113,7 @@ def get_hiercc_level(my_file):
 
 
 
-directory='/db/Campylobacter/jejuni/pubmlst' # where are the data for this species 
+directory='/db/pubmlst/Campylobacter/jejuni/' # where are the data for this species 
 scheme_name='C. jejuni / C. coli cgMLST v2' # name of the scheme in that database 
 
 slownik_hiercc = get_hiercc_level('parsed_phiercc_pubmlst.txt') # data for our sample 
@@ -2140,6 +2161,7 @@ with open('parsed_phiercc_pubmlst.txt') as f1, open('pubmlst.json', 'w') as f2:
 
 process plot_historical_data_pubmlst {
   container  = params.main_image
+  cpus 1
   tag "Plot historical data for sample $x"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy'
   input:
@@ -2173,7 +2195,8 @@ process run_amrfinder {
   tag "Predicting microbial resistance with AMRfinder for sample $x"
   // publishDir "pipeline_wyniki/${x}/AMRplus_fider", mode: 'copy', pattern: "AMRfinder*"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'amrfinder.json'
-  containerOptions "--volume ${params.db_absolute_path_on_host}/AMRfider_plus:/AMRfider"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/amrfider_plus:/AMRfider"
+  cpus 1
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
@@ -2218,14 +2241,14 @@ process run_amrfinder {
   """ 
 }
 
-//process build_model {
-  // Ogolny proces do budowania modelu
-  // Zostaje do implementacji przez Michala K.
-//}
-
+//process alphafold {
+// TO DO from Viral pipeline
+// }
 
 process run_plasmidfinder {
   container  = params.main_image
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1
   tag "Predicting plasmids for sample $x"
   // publishDir "pipeline_wyniki/${x}/plasmidfinder", mode: 'copy', pattern: "results_tab.tsv"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'plasmidfinder.json'
@@ -2254,7 +2277,7 @@ process run_plasmidfinder {
   else  
     if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
       mkdir plasmidfinder # program wymaga tworzenia katalogu samodzielnie
-      /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder -p /opt/docker/plasmidfinder_db -l 0.6 -t 0.9 -x
+      /opt/docker/plasmidfinder/plasmidfinder.py  -i $fasta -o plasmidfinder -p /db/plasmidfinder_db -l 0.6 -t 0.9 -x
       python /opt/docker/EToKi/externals/plasmidfinder_parser.py  -i plasmidfinder/results_tab.tsv -s "tak" -o plasmidfinder.json
     else
       mkdir plasmidfinder; touch plasmidfinder/results_tab.tsv
@@ -2269,6 +2292,8 @@ process run_plasmidfinder {
 
 process run_virulencefinder {
   container  = params.main_image
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1 
   tag "Predicting VirulenceFactors with run_virulencefinder for sample $x"
   // publishDir "pipeline_wyniki/${x}/virulencefinder", mode: 'copy', pattern: "results_tab.tsv"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'virulencefinder.json'
@@ -2299,7 +2324,7 @@ process run_virulencefinder {
     # json na zle QC
   else
     if [ ${GENUS} == "Escherichia" ]; then
-      /opt/docker/virulencefinder/virulencefinder.py  -i $fasta -o virulencefinder -p /opt/docker/virulencefinder_db  -d virulence_ecoli -l 0.6 -t 0.9 -x >> log 2>&1
+      /opt/docker/virulencefinder/virulencefinder.py  -i $fasta -o virulencefinder -p /db/virulencefinder_db  -d virulence_ecoli -l 0.6 -t 0.9 -x >> log 2>&1
       cp virulencefinder/results_tab.tsv .
       python /opt/docker/EToKi/externals/virulencefinder_parser.py  -i results_tab.tsv -s "tak" -o virulencefinder.json
     else
@@ -2322,6 +2347,7 @@ process run_virulencefinder {
 process get_species_illumina {
 // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
 container  = params.main_image
+cpus 1
 tag "Predicting species for ${x}"
 // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
 // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "contaminations.json"
@@ -2452,6 +2478,7 @@ fi
 process run_cgMLST_final_json {
   // Proces aggreguje wszystkie moduly zwiazane do wygenerowania json zgodnego z zakladka mlst_data z dokumentacji
   container  = params.main_image
+  cpus 1
   tag "generate final cgMLST json for sample $x"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "cgMLST_full.json"
   input:
@@ -2494,6 +2521,7 @@ process run_split_fasta {
   // Prosty proces to rozdzielenia pliku z wieloma fastami na podfasty
   // Oraz wygenerowanie odpowiedniego jsona
   container  = params.main_image
+  cpus 1
   tag "Splitting genome fasta for sample $x"
   publishDir "pipeline_wyniki/${x}/fastas", mode: 'copy', pattern: "*fasta"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "fasta_info.json"
@@ -2538,6 +2566,7 @@ with open("fasta_info.json", 'w') as f1:
 
 process merge_all_subjsons_illumina {
   container  = params.main_image
+  cpus 1
   tag "Merging all subjsons for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}.json"
   input:
@@ -2579,9 +2608,10 @@ process merge_all_subjsons_illumina {
 process run_initial_mlst_nanopore {
   // Kopia procesu dla illuminy ale obslugujacy jeden plik fastq.gz
   container  = params.main_image
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1
   tag "Initial MLST for sample $x"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "initial_mlst.json"
-  maxForks 5
   input:
   tuple val(x), path(reads), val(SPECIES), val(GENUS), val(QC_status)
   output:
@@ -2596,12 +2626,12 @@ process run_initial_mlst_nanopore {
     QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -s ${QC_status} -r "\${ERR_MSG}" -o initial_mlst.json`  
   else
     if [[ "${GENUS}" == *"Salmo"* ]]; then
-    python /opt/docker/mlst/mlst.py -i ${reads} -s senterica -p /opt/docker/mlst_db/ -mp kma -t tmp/
+    python /opt/docker/mlst/mlst.py -i ${reads} -s senterica -p /db/mlst_db/ -mp kma -t tmp/
     elif [[ "${GENUS}" == *"Escher"* ]]; then
-    python /opt/docker/mlst/mlst.py -i ${reads} -s ecoli -p /opt/docker/mlst_db/ -mp kma -t tmp/
+    python /opt/docker/mlst/mlst.py -i ${reads} -s ecoli -p /db//mlst_db/ -mp kma -t tmp/
     elif [ ${GENUS} == "Campylobacter" ]; then
     # w tej bazie podgatunki campylo okreslane sa typowo z cjejuni, clari itd ..
-    python /opt/docker/mlst/mlst.py -i ${reads} -s c${SPECIES} -p /opt/docker/mlst_db/ -mp kma -t tmp/
+    python /opt/docker/mlst/mlst.py -i ${reads} -s c${SPECIES} -p /db/mlst_db/ -mp kma -t tmp/
     else
       ERR_MSG=`echo This program is intended to work with following genera: Salmonella, Escherichia, and Campylobacter. Genus identified in this sample is: ${GENUS}`
       QC_status_exit=`python /opt/docker/EToKi/externals/initial_mlst_parser.py -s blad -r "\${ERR_MSG}" -o initial_mlst.json`
@@ -2632,10 +2662,9 @@ process run_flye {
   container  = params.main_image
   tag "Predicting scaffold with flye for sample $x"
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
-  cpus params.cpus
-  // in --deterministic is awfully slow because in uses 1 cpu for some task
-  // hence I increased maxforks to 10
-  maxForks 10 
+  cpus { params.threads > 15 ? 15 : params.threads }
+  // in --deterministic the process is slow because in uses 1 cpu for some task 
+  // maxForks 10 
   input:
   tuple val(x), path(fastq_gz), val(SPECIES), val(GENUS), val(QC_status)
   output:
@@ -2668,6 +2697,7 @@ process run_flye {
 
 process clean_fastq_nanopore {
   container  = params.main_image
+  cpus { params.threads > 15 ? 15 : params.threads }
   tag "Fixing fastq dla sample $x"
   input:
   tuple val(x), path(read), val(SPECIES), val(GENUS), val(QC_status)
@@ -2678,7 +2708,7 @@ process clean_fastq_nanopore {
   if [ ${QC_status} == "nie" ]; then
     touch prep_out_L1_SE.fastq.gz
   else
-    python /opt/docker/EToKi/EToKi.py prepare --se ${read} -c ${params.cpus} -q ${params.quality} -p prep_out 
+    python /opt/docker/EToKi/EToKi.py prepare --se ${read} -c ${task.cpus} -q ${params.quality} -p prep_out 
   fi
   """
 }
@@ -2690,7 +2720,7 @@ process run_minimap2 {
   tag "Remapping of reads to predicted scaffold for sample $x"
   container  = params.main_image 
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
-  maxForks 5
+  cpus params.threads
   input:
   tuple val(x), path(fasta), path(reads), val(SPECIES), val(GENUS), val(QC_status)
   output:
@@ -2702,7 +2732,7 @@ process run_minimap2 {
     touch sorted.bam
     # dummy output aby skypt poszedl dalej
   else
-    minimap2 -a -x map-ont -t ${params.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${params.cpus} -o sorted.bam -
+    minimap2 -a -x map-ont -t ${task.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${task.cpus} -o sorted.bam -
   fi
   """
 }
@@ -2713,7 +2743,7 @@ process run_minimap2_2nd {
   tag "Remapping of reads to predicted scaffold for sample $x"
   container  = params.main_image
   // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "*"
-  maxForks 5
+  cpus params.threads
   input:
   tuple val(x), path(fasta), path(reads), val(SPECIES), val(GENUS), val(QC_status)
   output:
@@ -2726,7 +2756,7 @@ process run_minimap2_2nd {
   else
     # minmap jest zarowno w PATH z etoki/externals jak i w /data/Flye/bin
 
-    minimap2 -a -x map-ont -t ${params.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${params.cpus} -o sorted.bam -
+    minimap2 -a -x map-ont -t ${task.cpus} $fasta $reads | samtools view -bS -F 2052 - | samtools sort -@ ${task.cpus} -o sorted.bam -
   fi
   """
 }
@@ -2767,7 +2797,7 @@ process run_medaka {
   container  = params.main_image
   tag "Medaka for sample $x"
   // publishDir "pipeline_wyniki/${x}/medaka", mode: 'copy', pattern: 'latest_pilon.*'
-  maxForks 5
+  cpus { params.threads > 15 ? 15 : params.threads }
   input:
   tuple val(x), path(bam1), path(fasta), val(QC_status)
   output:
@@ -2783,7 +2813,7 @@ process run_medaka {
  
   
     medaka inference --model ${params.model_medaka} \
-                     --threads ${params.cpus} \
+                     --threads ${task.cpus} \
                      $bam1 \
                      forvariants.hdf
 
@@ -2813,8 +2843,9 @@ process run_kraken2_nanopore {
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2_individualreads.txt"
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken*.txt"
-  containerOptions "--volume ${params.kraken2_db_absolute_path_on_host}:/home/external_databases/kraken2"
-  maxForks 6
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus params.threads
+  memory '80 GB'
 
   input:
   tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
@@ -2831,9 +2862,9 @@ process run_kraken2_nanopore {
     touch Summary_kraken_genera.txt
     touch Summary_kraken_species.txt
   else
-    kraken2 --db /home/external_databases/kraken2 \
+    kraken2 --db /db/kraken2 \
             --report report_kraken2.txt \
-            --threads ${params.cpus} \
+            --threads ${task.cpus} \
             --gzip-compressed \
             --minimum-base-quality ${params.quality} \
             --use-names ${reads} >> report_kraken2_individualreads.txt 2>&1
@@ -2862,9 +2893,9 @@ process run_kmerfinder_nanopore {
   tag "kmerfinder:${x}"
   container  = params.main_image
   // publishDir "pipeline_wyniki/${x}/kmerfinder", mode: 'copy', pattern: "results.spa"
-  containerOptions "--volume ${params.db_absolute_path_on_host}/Kmerfinder/kmerfinder_db:/kmerfinder_db"
-  maxForks 5
-  cpus params.cpus
+  containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
+  cpus 1
+  memory '10 GB'
   input:
   tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
 
@@ -2880,7 +2911,7 @@ process run_kmerfinder_nanopore {
     SPECIES=""
     GENUS=""
   else
-    /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /kmerfinder_db/bacteria/bacteria.ATG -tax /kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+    /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /db/kmerfinder_db/bacteria/bacteria.ATG -tax /db/kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
     cp kmerfider_out/results.spa .
     cp kmerfider_out/results.txt .
   
@@ -2891,21 +2922,22 @@ process run_kmerfinder_nanopore {
 }
 
 process get_species_nanopore {
-// Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
-container  = params.main_image
-tag "Predicting species for ${x}"
-// publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
-// publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "contaminations.json"
-input:
-tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS), val(QC_STATUS), val(TOTAL_BASES)
+  // Process laczy ouputy predykcji z krakena2, metaphlan i kmerfindera
+  container  = params.main_image
+  cpus 1
+  tag "Predicting species for ${x}"
+  // publishDir "pipeline_wyniki/${x}", mode: 'copy', pattern: "predicted_genus_and_species.txt"
+  // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "contaminations.json"
+  input:
+  tuple val(x), path('report_kraken2.txt'), path('report_kraken2_individualreads.txt'), path('Summary_kraken_genera.txt'), path('Summary_kraken_species.txt'),  path('results.spa'), path('results.txt'), val(KMERFINDER_SPECIES), val(KMERFINDER_GENUS), val(QC_STATUS), val(TOTAL_BASES)
 
-output:
-tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contaminations), emit: species_and_qcstatus
-path('predicted_genus_and_species.txt'), emit: to_pubdir
-tuple val(x), path('contaminations.json'), ('Genus_species.json'), emit: json
-tuple val(x), env(QC_status_contaminations), emit: qcstatus_only
-tuple val(x), env(FINAL_GENUS), emit:genus_only
-script:
+  output:
+  tuple val(x), env(FINALE_SPECIES), env(FINAL_GENUS), env(QC_status_contaminations), emit: species_and_qcstatus
+  path('predicted_genus_and_species.txt'), emit: to_pubdir
+  tuple val(x), path('contaminations.json'), ('Genus_species.json'), emit: json
+  tuple val(x), env(QC_status_contaminations), emit: qcstatus_only
+  tuple val(x), env(FINAL_GENUS), emit:genus_only
+  script:
 """
 if [ ${QC_STATUS} == "nie" ]; then
   QC_status_contaminations="nie"
@@ -3013,6 +3045,7 @@ fi
 
 process merge_all_subjsons_nanopore {
   container  = params.main_image
+  cpus 1
   tag "Merging all subjsons for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}.json"
   input:
@@ -3324,14 +3357,19 @@ run_split_fasta_out = run_split_fasta(final_assembly)
 // Species prediction with Achtman and core genome shemes
 final_assembly_with_species = extract_final_stats_genome.join(predict_species_out, by : 0)
 MLST_out = run_7MLST(final_assembly_with_species)
-parse_7MLST_out = parse_7MLST(MLST_out)
+MLST_out_delayed = MLST_out.map {it -> sleep(20000); it}
+parse_7MLST_out = parse_7MLST(MLST_out_delayed) // channel is delayed to avoid rare situation where multiple sample with unknown ST are assaign the same local ST number
 
 
 cgMLST_out = run_cgMLST(final_assembly_with_species)
-(parse_cgMLST_out, parse_cgMLST_only_duplicates, parse_cgMLST_only_json) = parse_cgMLST(cgMLST_out)
+cgMLST_out_delayed = cgMLST_out.map {it -> sleep(60000); it}
+(parse_cgMLST_out, parse_cgMLST_only_duplicates, parse_cgMLST_only_json) = parse_cgMLST(cgMLST_out_delayed) // channel is delayed to avoid rare situation where multiple sample with unknown cgST are assaign the same local cgST number
+
 (run_pHierCC_local_pubdir, run_pHierCC_local_json) = run_pHierCC_local(parse_cgMLST_out)
 
-run_pHierCC_enterobase_out = run_pHierCC_enterobase(parse_cgMLST_out) // for Salmo and Escher
+parse_cgMLST_out_delayed = parse_cgMLST_out.map {it -> sleep(20000); it}
+run_pHierCC_enterobase_out = run_pHierCC_enterobase(parse_cgMLST_out_delayed) // for Salmo and Escher input channel is delayed to avoid multiple simultaneous queries of Enterbase API
+
 run_pHierCC_enterobase_out_pubmlst = run_pHierCC_pubmlst(parse_cgMLST_out) // only for jejuni
 
 (extract_historical_data_enterobase_toplot, extract_historical_data_enterobase_json)  = extract_historical_data_enterobase(run_pHierCC_enterobase_out)

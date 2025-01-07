@@ -69,26 +69,26 @@ RUN git clone https://bitbucket.org/genomicepidemiology/kma.git; cd kma ; make; 
 ## CGE databases
 
 
-RUN git clone https://bitbucket.org/genomicepidemiology/pointfinder_db/; \
-    git clone https://bitbucket.org/genomicepidemiology/disinfinder_db/; \
-    git clone https://bitbucket.org/genomicepidemiology/resfinder_db.git; \
-    git clone https://bitbucket.org/genomicepidemiology/plasmidfinder_db.git; \
-    git clone --depth 1 https://git@bitbucket.org/genomicepidemiology/virulencefinder_db.git; \
-    git clone https://bitbucket.org/genomicepidemiology/spifinder_db.git; \
-    git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git ;\
-    git clone https://bitbucket.org/genomicepidemiology/mlst_db.git
+#RUN git clone https://bitbucket.org/genomicepidemiology/pointfinder_db/; \
+#    git clone https://bitbucket.org/genomicepidemiology/disinfinder_db/; \
+#    git clone https://bitbucket.org/genomicepidemiology/resfinder_db.git; \
+#    git clone https://bitbucket.org/genomicepidemiology/plasmidfinder_db.git; \
+#    git clone --depth 1 https://git@bitbucket.org/genomicepidemiology/virulencefinder_db.git; \
+#    git clone https://bitbucket.org/genomicepidemiology/spifinder_db.git; \
+#    git clone https://bitbucket.org/genomicepidemiology/cgmlstfinder_db.git ;\
+#    git clone https://bitbucket.org/genomicepidemiology/mlst_db.git
     
 
 ## "Installing" database (save cgmlstfinder_db that we dont use for now )
 
-RUN cd /opt/docker/pointfinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
-    cd /opt/docker/disinfinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
-    cd /opt/docker/resfinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
-    cd /opt/docker/plasmidfinder_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
-    cd /opt/docker/virulencefinder_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
-    cd /opt/docker/spifinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
-    cd /opt/docker/mlst_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
-    cd /opt/docker
+#RUN cd /opt/docker/pointfinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+#    cd /opt/docker/disinfinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+#    cd /opt/docker/resfinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+#    cd /opt/docker/plasmidfinder_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+#    cd /opt/docker/virulencefinder_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+#    cd /opt/docker/spifinder_db; python3 INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+#    cd /opt/docker/mlst_db; python INSTALL.py /opt/docker/kma/kma_index non_interactive; \
+#    cd /opt/docker
 
 ## CGE programs
 
@@ -105,9 +105,9 @@ RUN git clone https://bitbucket.org/genomicepidemiology/plasmidfinder.git; \
     cd /opt/docker
  
 ENV PATH="/opt/docker/kma:$PATH"
-ENV CGE_RESFINDER_RESGENE_DB="/opt/docker/resfinder_db"
-ENV CGE_RESFINDER_RESPOINT_DB="/opt/docker/pointfinder_db"
-ENV CGE_DISINFINDER_DB="/opt/docker/disinfinder_db"
+#ENV CGE_RESFINDER_RESGENE_DB="/opt/docker/resfinder_db"
+#ENV CGE_RESFINDER_RESPOINT_DB="/opt/docker/pointfinder_db"
+#ENV CGE_DISINFINDER_DB="/opt/docker/disinfinder_db"
 
 # Metaphlan
 

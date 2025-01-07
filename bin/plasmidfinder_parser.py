@@ -34,6 +34,9 @@ def main_program(status, input_file, output, error=""):
 
                     coverage_template, coverage_query = coverage.split("/")
                     coverage = float(coverage_template)/ float(coverage_query) * 100
+                    if coverage > 100:
+                        # Ten sam workaround co w spifinder
+                        coverage=100
                     plasmids_data.append({"plasmid_name" : plasmid_name,
                                           "sequence_similarity_to_reference_value" : seq_identity,
                                           "degree_of_overlap_with_reference_value" : round(coverage, 2),
