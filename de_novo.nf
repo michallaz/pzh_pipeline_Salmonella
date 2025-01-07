@@ -691,7 +691,7 @@ process run_Seqsero {
   tag "Predicting OH for sample $x with Seqsero"
   // publishDir "pipeline_wyniki/${x}/seqsero", mode: 'copy',  pattern: "seqsero/SeqSero_result.txt"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "seqsero.json"
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 5 ? 5 : params.threads }
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
@@ -733,7 +733,7 @@ process run_sistr {
   // Sistr works only for Salmonella
   container  =  params.main_image
   tag "Predicting OH for sample $x with Sistr"
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 5 ? 5 : params.threads }
   // publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy', pattern: "sistr-output.tab"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "sistr.json"
   input:
@@ -779,7 +779,7 @@ process run_sistr {
 process run_ectyper {
   // This process works only for Escherichia
   container  = params.main_image
-  cpus { params.threads > 15 ? 5 : params.threads }
+  cpus { params.threads > 5 ? 5 : params.threads }
   tag "Predicting OH for sample $x with ectyper"
   // publishDir "pipeline_wyniki/${x}/ECTyper", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "ectyper.json"
@@ -1145,7 +1145,7 @@ process run_prokka {
   tag "Predicting genes for sample $x"
   // Do we really need prokka output in results dir ? 
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
-  cpus params.threads
+  cpus { params.threads > 20 ? 20 : params.threads }
   // maxForks 5
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
@@ -1179,7 +1179,7 @@ process run_VFDB {
   tag "Predicting VirulenceFactors for sample $x"
   // publishDir "pipeline_wyniki/${x}/VFDB/", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "vfdb.json"
-  cpus params.threads
+  cpus { params.threads > 20 ? 20 : params.threads }
   // maxForks 5
   input:
   // inputem jest output procesu run_prokka
@@ -1361,7 +1361,7 @@ process run_spifinder {
   tag "Predicting virulence islands for sample $x"
   // publishDir "pipeline_wyniki/${x}/spifinder", mode: 'copy', pattern: "results_tab.tsv"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "spifinder.json"
-  // cpus params.cpus
+  cpus 1
   // maxForks 5
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
@@ -1407,7 +1407,7 @@ process run_kraken2_illumina {
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken_*.txt"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  cpus params.threads
+  cpus { params.threads > 15 ? 15 : params.threads }
   memory '80 GB'
 
   input:
@@ -1456,7 +1456,7 @@ process run_metaphlan_illumina {
   container  = params.main_image
   // publishDir "pipeline_wyniki/${x}/metaphlan", mode: 'copy', pattern: "report_metaphlan*"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  cpus params.threads
+  cpus { params.threads > 15 ? 15 : params.threads }
   memory '25 GB'
 
   input:
@@ -2843,7 +2843,7 @@ process run_kraken2_nanopore {
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken*.txt"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  cpus params.threads
+  cpus { params.threads > 15 ? 15 : params.threads }
   memory '80 GB'
 
   input:
