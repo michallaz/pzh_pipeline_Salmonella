@@ -2255,7 +2255,7 @@ process run_alphafold {
     tuple val(x), path(gff), path(faa), path(ffn), path(tsv), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
 
     output:
-    // tuple val(sampleId), path("*.pdb"), emit: to_pubdir // return any number of pdbs produce by this module
+    // tuple val(x), path("*.pdb"), emit: to_pubdir // return any number of pdbs produce by this module
     tuple val(x), path('alphafold.json'), emit: json
 
     script:
@@ -2679,7 +2679,7 @@ process merge_all_subjsons_illumina {
   tag "Merging all subjsons for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}.json"
   input:
-  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), val(PATOTYP), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("reverse.json"), path("contaminations.json"), path('Genus_species.json'), path("initial_MLST.json"), path("genome_file.json"), path("bacterial_genome.json")
+  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("alphafold.json"), path("vfdb.json"), val(PATOTYP), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("reverse.json"), path("contaminations.json"), path('Genus_species.json'), path("initial_MLST.json"), path("genome_file.json"), path("bacterial_genome.json")
   val(ExecutionDir)
   output:
   path("${x}.json")
@@ -3158,7 +3158,7 @@ process merge_all_subjsons_nanopore {
   tag "Merging all subjsons for sample $x"
   publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}.json"
   input:
-  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("vfdb.json"), val(PATOTYP), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("contaminations.json"), path('Genus_species.json'), path("initial_MLST.json"), path("genome_file.json"), path("bacterial_genome.json")
+  tuple val(x), path("sistr.json"), path("seqsero.json"), path("spifinder.json"), path("ectyper.json"), path("virulencefinder.json"), path("alphafold.json"), path("vfdb.json"), val(PATOTYP), path("plasmidfinder.json"), path("amrfinder.json"), path("resfinder.json"), path("cgMLST.json"), path("MLST.json"), path("forward.json"), path("contaminations.json"), path('Genus_species.json'), path("initial_MLST.json"), path("genome_file.json"), path("bacterial_genome.json")
   val(ExecutionDir)
   output:
   path("${x}.json")
@@ -3525,6 +3525,7 @@ alphafold_out = run_alphafold(delayed_alphafold)
   channnel_to_json = channnel_to_json.join(run_spifinder_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_ectype_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_virulencefinder_out.json, by : 0)
+  channnel_to_json = channnel_to_json.join(alphafold_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_VFDB_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(parse_VFDB_ecoli_out.json, by : 0)
   channnel_to_json = channnel_to_json.join(run_plasmidfinder_out.json, by : 0)
