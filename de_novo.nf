@@ -8,6 +8,7 @@ params.reads =''  // Must be set up by User, path to reads i.e. '/mnt/sda1/micha
 params.machine = '' // Can be set to either 'Illumina' or 'Nanopore'. Required
 params.main_image = "salmonella_illumina:3.0" // 3.0 updated amrfinder to version 4+
 params.prokka_image = "staphb/prokka:latest" // prokka image (publicly available)
+params.alphafold_image ="alphafold:1.1"  // image with alphafold
 
 // // API TOKEN for ENTEROBASE API 2.0. USER-specific for now this is my PRIVATE token.
 // params.enterobase_api_token = "" // This parameter was pushed for security reason to ./nextflow/config
@@ -85,7 +86,7 @@ process run_fastqc_illumina {
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 10 ? 10 : params.threads }
   memory "10 GB"
   input:
   tuple val(x), path(reads), val(QC_STATUS)
@@ -133,7 +134,7 @@ process run_fastqc_nanopore {
   container  = params.main_image
   publishDir "pipeline_wyniki/${x}/QC", mode: 'copy'
   //publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "*.json"
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 10 ? 10 : params.threads }
   memory "10 GB"
   input:
   tuple val(x), path(reads), val(QC_STATUS)
@@ -174,7 +175,7 @@ process clean_fastq_illumina {
 
   container  = params.main_image
   tag "Fixing fastq dla sample $x"
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 10 ? 10 : params.threads }
   input:
   tuple val(x), path(reads), val(QC_status)
   output:
@@ -691,7 +692,7 @@ process run_Seqsero {
   tag "Predicting OH for sample $x with Seqsero"
   // publishDir "pipeline_wyniki/${x}/seqsero", mode: 'copy',  pattern: "seqsero/SeqSero_result.txt"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "seqsero.json"
-  cpus { params.threads > 5 ? 5 : params.threads }
+  cpus { params.threads > 3 ? 3 : params.threads }
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
   output:
@@ -703,7 +704,7 @@ process run_Seqsero {
   """
   # -m to rodzaj algorytmu -m to chyba opart o k-mery
   # -t 4 to informacja ze inputem sa contigi z genomem
-  # -p to procki, proces jest szybki wiec ustawie 4 + maxforks 15
+  # -p to procki, proces jest szybki i raport nextflow sugeruje uzyci bliskie 1 CPU
 
   if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
     mkdir seqsero
@@ -733,7 +734,7 @@ process run_sistr {
   // Sistr works only for Salmonella
   container  =  params.main_image
   tag "Predicting OH for sample $x with Sistr"
-  cpus { params.threads > 5 ? 5 : params.threads }
+  cpus { params.threads > 3 ? 3 : params.threads }
   // publishDir "pipeline_wyniki/${x}/sistr", mode: 'copy', pattern: "sistr-output.tab"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "sistr.json"
   input:
@@ -779,7 +780,7 @@ process run_sistr {
 process run_ectyper {
   // This process works only for Escherichia
   container  = params.main_image
-  cpus { params.threads > 5 ? 5 : params.threads }
+  cpus { params.threads > 3 ? 3 : params.threads }
   tag "Predicting OH for sample $x with ectyper"
   // publishDir "pipeline_wyniki/${x}/ECTyper", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "ectyper.json"
@@ -1145,7 +1146,7 @@ process run_prokka {
   tag "Predicting genes for sample $x"
   // Do we really need prokka output in results dir ? 
   // publishDir "pipeline_wyniki/${x}", mode: 'copy'
-  cpus { params.threads > 20 ? 20 : params.threads }
+  cpus { params.threads > 25 ? 25 : params.threads }
   // maxForks 5
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
@@ -1179,7 +1180,7 @@ process run_VFDB {
   tag "Predicting VirulenceFactors for sample $x"
   // publishDir "pipeline_wyniki/${x}/VFDB/", mode: 'copy'
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: "vfdb.json"
-  cpus { params.threads > 20 ? 20 : params.threads }
+  cpus { params.threads > 25 ? 25 : params.threads }
   // maxForks 5
   input:
   // inputem jest output procesu run_prokka
@@ -1407,7 +1408,7 @@ process run_kraken2_illumina {
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken_*.txt"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 10 ? 10 : params.threads }
   memory '80 GB'
 
   input:
@@ -1456,7 +1457,7 @@ process run_metaphlan_illumina {
   container  = params.main_image
   // publishDir "pipeline_wyniki/${x}/metaphlan", mode: 'copy', pattern: "report_metaphlan*"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 10 ? 10 : params.threads }
   memory '25 GB'
 
   input:
@@ -2240,9 +2241,118 @@ process run_amrfinder {
   """ 
 }
 
-//process alphafold {
-// TO DO from Viral pipeline
-// }
+process run_alphafold {
+    tag "Alphafold for sample ${x}"
+    maxRetries 3
+    cpus { params.threads > 15 ? 15 : params.threads }
+    errorStrategy 'retry'
+    maxForks 8
+    // Let us leave one GPU free just in case a "failed" process rebounce and quickly ask for an empy GPU
+    container  = params.alphafold_image
+    containerOptions "--volume ${params.db_absolute_path_on_host}/alphafold:/db --gpus all"
+    publishDir "pipeline_wyniki/${x}/", mode: 'copy'// , pattern: '*.pdb'
+    input:
+    tuple val(x), path(gff), path(faa), path(ffn), path(tsv), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
+
+    output:
+    // tuple val(sampleId), path("*.pdb"), emit: to_pubdir // return any number of pdbs produce by this module
+    tuple val(sampleId), path('alphafold.json'), emit: json
+
+    script:
+    """
+    # This function can be used to model multimers with alphafold
+    # It requires two additiona databases pdb_seqres_database_path and uniprot_database_path
+    run_alpfafold_mer() {
+      # --mgnify_database_path="/db/mgnify/mgy_clusters_2022_05.fa" 
+      # --small_bfd_database_path="/db/small_bfd/bfd-first_non_consensus_sequences.fasta" 
+      python /app/alphafold/run_alphafold.py  --fasta_paths="\$1" \
+                                               --data_dir="/db/" \
+                                               --db_preset="reduced_dbs" \
+                                               --output_dir="\$2" \
+                                               --uniref90_database_path="/db/uniref50/uniref50.fasta" \
+                                               --mgnify_database_path="/db/uniref50/uniref50.fasta" \
+                                               --small_bfd_database_path="/db/uniref50/uniref50.fasta" \
+                                               --template_mmcif_dir="/db/pdb_mmcif/mmcif_files/" \
+                                               --max_template_date="2024-05-14" \
+                                               --obsolete_pdbs_path="/db/pdb_mmcif/obsolete.dat" \
+                                               --use_gpu_relax=true \
+                                               --pdb70_database_path="/db/pdb70/pdb70" \
+                                               --models_to_relax=best \
+                                               --model_preset=multimer \
+                                               --pdb_seqres_database_path="/db/pdb_seqres/pdb_seqres.txt" \
+                                               --uniprot_database_path=/db/uniprot/uniprot.fasta
+
+    } 
+    # For all species as a proof of concept we predict gyrase structure
+
+    # increase number of CPUs for jackhammer and hhblits for alignment
+    sed -i s"|n_cpu: int = 8|n_cpu: int = ${task.cpus}|"g /app/alphafold/alphafold/data/tools/jackhmmer.py
+    sed -i s"|n_cpu: int = 4|n_cpu: int = ${task.cpus}|"g /app/alphafold/alphafold/data/tools/hhblits.py
+
+    # update alphafold config to run only "model_1"
+    sed -i -E "s|'model_1',|['model_1']|g" /app/alphafold/alphafold/model/config.py
+    sed -i -zE "s|'model_2',\\s*'model_3',\\s*'model_4',\\s*'model_5',\\s*||g" /app/alphafold/alphafold/model/config.py
+    # and 'model_1_multimer_v3'
+    sed -i -E "s|'model_1_multimer_v3',|['model_1_multimer_v3']|g" /app/alphafold/alphafold/model/config.py
+    sed -i -zE "s|'model_2_multimer_v3',\\s*'model_3_multimer_v3',\\s*'model_4_multimer_v3',\\s*'model_5_multimer_v3',\\s*||g" /app/alphafold/alphafold/model/config.py
+
+
+    # Determine which GPU is free
+    nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits > tmp_smi.log
+    ID=0
+    while read L; do
+      SMI_1=`echo \${L} | cut -d " " -f1`
+      if [ \${SMI_1} -lt 50 ]; then
+        break
+      else
+        ID=`echo "\${ID} + 1" | bc -l`
+      fi
+    done < tmp_smi.log
+
+    # If no device is free than send exit code 1 and retry
+    if [ \${ID} -gt 7 ]; then
+       exit 1
+    fi
+
+    ## Steer alphafold to use available gpu
+    export CUDA_VISIBLE_DEVICES=\${ID}
+
+    mkdir wynik
+    
+    if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
+      # failed QC
+      touch ${x}.pdb
+      ERR_MSG="This modue was entered with bad QC"
+      echo -e "{\\"status\\":\\"nie\\",
+                \\"error_message\\": \\"\${ERR_MSG}\\"}" >> alphafold.json
+
+    else
+      if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
+
+        grep "gyrase subunit" $faa >> names.txt
+        seqtk subseq $faa names.txt >> gyrase_complex.fasta
+        
+        run_alpfafold_mer gyrase_complex.fasta wynik
+        pdb_path="TBD"
+        protein_name="Gyrase"
+        # cp wynik/`basename \${target_fasta_G} ".fasta"`/ranked_0.pdb ${sampleId}_G.pdb
+        echo -e "{\\"status\\":\\"tak\\",
+                  \\"protein_structure_data\\":[{\\"protein_name\\":\\"\${protein_name}\\",
+                                                 \\"pdb_file\\":\\"\${pdb_path}\\"
+                                                }
+                                                ]}" >> alphafold.json
+
+      else
+        touch ${x}.pdb
+        ERR_MSG="Wrong species"
+        echo -e "{\\"status\\":\\"nie\\",
+                  \\"error_message\\": \\"\${ERR_MSG}\\"}" >> alphafold.json
+
+      fi # if na zly rodzaj
+    fi # Error na zle QC
+    """
+
+}
 
 process run_plasmidfinder {
   container  = params.main_image
@@ -2696,7 +2806,7 @@ process run_flye {
 
 process clean_fastq_nanopore {
   container  = params.main_image
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 10 ? 10 : params.threads }
   tag "Fixing fastq dla sample $x"
   input:
   tuple val(x), path(read), val(SPECIES), val(GENUS), val(QC_status)
@@ -2843,7 +2953,7 @@ process run_kraken2_nanopore {
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "report_kraken2.txt"
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken*.txt"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  cpus { params.threads > 15 ? 15 : params.threads }
+  cpus { params.threads > 10 ? 10 : params.threads }
   memory '80 GB'
 
   input:
@@ -3402,6 +3512,10 @@ run_ectype_out = run_ectyper(final_assembly_with_species)
 run_spifinder_out = run_spifinder(final_assembly_with_species)
 run_seqsero_out = run_Seqsero(final_assembly_with_species)
 run_sistr_out = run_sistr(final_assembly_with_species)
+
+// Alphafold
+delayed_alphafold = prokka_out.map {it -> sleep(20000); it} // Delay each element in channel by 20s
+alphafold_out = run_alphafold(delayed_alphafold)
 
 // Aggregate all modules that emit json 
 // Split into two channels: channnel_to_json and initial_to_json is purely to split outputs of module that are 
