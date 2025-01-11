@@ -2256,7 +2256,7 @@ process run_alphafold {
 
     output:
     // tuple val(sampleId), path("*.pdb"), emit: to_pubdir // return any number of pdbs produce by this module
-    tuple val(sampleId), path('alphafold.json'), emit: json
+    tuple val(x), path('alphafold.json'), emit: json
 
     script:
     """
@@ -2276,11 +2276,10 @@ process run_alphafold {
                                                --max_template_date="2024-05-14" \
                                                --obsolete_pdbs_path="/db/pdb_mmcif/obsolete.dat" \
                                                --use_gpu_relax=true \
-                                               --pdb70_database_path="/db/pdb70/pdb70" \
                                                --models_to_relax=best \
                                                --model_preset=multimer \
                                                --pdb_seqres_database_path="/db/pdb_seqres/pdb_seqres.txt" \
-                                               --uniprot_database_path=/db/uniprot/uniprot.fasta
+                                               --uniprot_database_path="/db/uniprot/uniprot.fasta"
 
     } 
     # For all species as a proof of concept we predict gyrase structure
@@ -2302,7 +2301,8 @@ process run_alphafold {
     ID=0
     while read L; do
       SMI_1=`echo \${L} | cut -d " " -f1`
-      if [ \${SMI_1} -lt 50 ]; then
+      if [ \${SMI_1} -lt 5000 ]; then
+        # given gpu uses less than 5Gb of memory
         break
       else
         ID=`echo "\${ID} + 1" | bc -l`
@@ -2329,7 +2329,7 @@ process run_alphafold {
     else
       if [[ ${GENUS} == "Salmonella" || ${GENUS} == "Escherichia" || ${GENUS} == "Campylobacter" ]]; then
 
-        grep "gyrase subunit" $faa >> names.txt
+        grep "gyrase subunit" $faa | tr -d ">" >> names.txt
         seqtk subseq $faa names.txt >> gyrase_complex.fasta
         
         run_alpfafold_mer gyrase_complex.fasta wynik
