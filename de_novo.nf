@@ -2250,12 +2250,12 @@ process run_alphafold {
     // Let us leave one GPU free just in case a "failed" process rebounce and quickly ask for an empy GPU
     container  = params.alphafold_image
     containerOptions "--volume ${params.db_absolute_path_on_host}/alphafold:/db --gpus all"
-    publishDir "pipeline_wyniki/${x}/", mode: 'copy'// , pattern: '*.pdb'
+    publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "${x}_gyrase_complex.pdb"
     input:
     tuple val(x), path(gff), path(faa), path(ffn), path(tsv), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
 
     output:
-    // tuple val(x), path("*.pdb"), emit: to_pubdir // return any number of pdbs produce by this module
+    tuple val(x), path("${x}_gyrase_complex.pdb"), emit: to_pubdir // return any number of pdbs produce by this module
     tuple val(x), path('alphafold.json'), emit: json
 
     script:
@@ -2279,7 +2279,8 @@ process run_alphafold {
                                                --models_to_relax=best \
                                                --model_preset=multimer \
                                                --pdb_seqres_database_path="/db/pdb_seqres/pdb_seqres.txt" \
-                                               --uniprot_database_path="/db/uniprot/uniprot.fasta"
+                                               --uniprot_database_path="/db/uniprot/uniprot_sprot.fasta" \
+                                               --num_multimer_predictions_per_model=2
 
     } 
     # For all species as a proof of concept we predict gyrase structure
@@ -2317,7 +2318,7 @@ process run_alphafold {
     ## Steer alphafold to use available gpu
     export CUDA_VISIBLE_DEVICES=\${ID}
 
-    mkdir wynik
+    mkdir wyniki
     
     if [[ ${QC_status} == "nie"  || ${QC_status_contaminations} == "nie" ]]; then
       # failed QC
@@ -2332,10 +2333,10 @@ process run_alphafold {
         grep "gyrase subunit" $faa | tr -d ">" >> names.txt
         seqtk subseq $faa names.txt >> gyrase_complex.fasta
         
-        run_alpfafold_mer gyrase_complex.fasta wynik
-        pdb_path="TBD"
+        run_alpfafold_mer gyrase_complex.fasta wyniki
         protein_name="Gyrase"
-        # cp wynik/`basename \${target_fasta_G} ".fasta"`/ranked_0.pdb ${sampleId}_G.pdb
+        cp wyniki/gyrase_complex/relaxed_model_1_multimer_v3_pred_*pdb ${x}_gyrase_complex.pdb
+        pdb_path="${x}_gyrase_complex.pdb"
         echo -e "{\\"status\\":\\"tak\\",
                   \\"protein_structure_data\\":[{\\"protein_name\\":\\"\${protein_name}\\",
                                                  \\"pdb_file\\":\\"\${pdb_path}\\"
