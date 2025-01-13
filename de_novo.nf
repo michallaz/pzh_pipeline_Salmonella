@@ -2266,21 +2266,21 @@ process run_alphafold {
       # --mgnify_database_path="/db/mgnify/mgy_clusters_2022_05.fa" 
       # --small_bfd_database_path="/db/small_bfd/bfd-first_non_consensus_sequences.fasta" 
       python /app/alphafold/run_alphafold.py  --fasta_paths="\$1" \
-                                               --data_dir="/db/" \
-                                               --db_preset="reduced_dbs" \
-                                               --output_dir="\$2" \
-                                               --uniref90_database_path="/db/uniref50/uniref50.fasta" \
-                                               --mgnify_database_path="/db/uniref50/uniref50.fasta" \
-                                               --small_bfd_database_path="/db/uniref50/uniref50.fasta" \
-                                               --template_mmcif_dir="/db/pdb_mmcif/mmcif_files/" \
-                                               --max_template_date="2024-05-14" \
-                                               --obsolete_pdbs_path="/db/pdb_mmcif/obsolete.dat" \
-                                               --use_gpu_relax=true \
-                                               --models_to_relax=best \
-                                               --model_preset=multimer \
-                                               --pdb_seqres_database_path="/db/pdb_seqres/pdb_seqres.txt" \
-                                               --uniprot_database_path="/db/uniprot/uniprot_sprot.fasta" \
-                                               --num_multimer_predictions_per_model=2
+                                              --data_dir="/db/" \
+                                              --db_preset="reduced_dbs" \
+                                              --output_dir="\$2" \
+                                              --uniref90_database_path="/db/uniref50/uniref50.fasta" \
+                                              --mgnify_database_path="/db/uniref50/uniref50.fasta" \
+                                              --small_bfd_database_path="/db/uniref50/uniref50.fasta" \
+                                              --template_mmcif_dir="/db/pdb_mmcif/mmcif_files/" \
+                                              --max_template_date="2024-05-14" \
+                                              --obsolete_pdbs_path="/db/pdb_mmcif/obsolete.dat" \
+                                              --use_gpu_relax=true \
+                                              --models_to_relax=best \
+                                              --model_preset=multimer \
+                                              --pdb_seqres_database_path="/db/pdb_seqres/pdb_seqres.txt" \
+                                              --uniprot_database_path="/db/uniprot/uniprot_sprot.fasta" \
+                                              --num_multimer_predictions_per_model=1
 
     } 
     # For all species as a proof of concept we predict gyrase structure
