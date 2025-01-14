@@ -50,13 +50,15 @@ import datetime
               type=click.Path(),  required=True)
 @click.option('-m', '--patotyp', help='[INPUT] String with all patotypes names predicted for a sample',
               type=str,  required=True)
+@click.option('--alphafold_file', help='[INPUT] Json prodyced by the alphafold module',
+              type=click.Path(),  required=True)
 @click.option('-w', '--executiondir', help='[INPUT] String with execution path of the program',
               type=str,  required=True)
 @click.option('-l', '--repo_version', help='[INPUT] Version of a repository',
               type=str,  required=True)
 @click.option('-z', '--output', help='[Output] Name of a file with json output',
               type=str,  required=True)
-def main_program(sistr_file, seqsero_file, spifinder_file,  ectyper_file,  virulencefinder_file,  vfdb_file,
+def main_program(sistr_file, seqsero_file, spifinder_file,  ectyper_file,  virulencefinder_file,  alphafold_file, vfdb_file,
                  plasmidfinder_file, amrfinder_file, resfinder_file,  cgmlst_file, mlst_file,  fastqc_forward_file,
                  fastqc_reverse_file, contaminations_file, genus_species_file, initial_mlst_file, genome_file, patotyp,
                  genome_statistics_file, repo_version, executiondir, output):
@@ -83,6 +85,7 @@ def main_program(sistr_file, seqsero_file, spifinder_file,  ectyper_file,  virul
                                           json.load(open(seqsero_file)),
                                           json.load(open(ectyper_file))]
     json_output["output"]["virulence_islands_data"] = json.load(open(spifinder_file))
+    json_output["output"]["structural_data"] = json.load(open(alphafold_file))
 
     json_output["output"]["virulence_genes_data"] = [json.load(open(virulencefinder_file))]
 

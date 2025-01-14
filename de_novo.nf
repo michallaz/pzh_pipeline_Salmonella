@@ -2709,7 +2709,8 @@ process merge_all_subjsons_illumina {
                                                           --genus_species_file Genus_species.json \
                                                           --repo_version "\${VERSION}" \
                                                           --output ${x}.json \
-                                                          --executiondir ${ExecutionDir}
+                                                          --executiondir ${ExecutionDir} \
+                                                          --alphafold_file alphafold.json
   """
 
 }
@@ -3188,7 +3189,8 @@ process merge_all_subjsons_nanopore {
                                                           --genome_file genome_file.json \
                                                           --repo_version "\${VERSION}" \
                                                           --output ${x}.json \
-                                                          --executiondir ${ExecutionDir}
+                                                          --executiondir ${ExecutionDir} \
+                                                          --alphafold_file alphafold.json
   """
 
 
