@@ -826,7 +826,9 @@ process run_resfinder {
   container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   
-  cpus 1
+  cpus 4
+  // The process actually, uses a single CPU but it seems there is a problem when too many processes try to access the same data. 
+  // "Broken pipe" error appears. Hence, increasing cpus with this directive artificially decreases the number of processes that can run concurrently. 
   tag "Predicting microbial resistance for sample $x"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/ResFinder_results_table.txt"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/pheno_table_*.txt"
@@ -1508,7 +1510,7 @@ process run_kmerfinder_illumina {
     SPECIES=""
     GENUS=""
   else
-    /opt/docker/kmerfinder/kmerfinder.py -i ${reads[0]} ${reads[1]} -o ./kmerfider_out -db /db/kmerfinder/kmerfinder_db/bacteria/bacteria.ATG -tax /db/kmerfinder/kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+    /opt/docker/kmerfinder/kmerfinder.py -i ${reads[0]} ${reads[1]} -o ./kmerfider_out -db /db/kmerfinder/bacteria/bacteria.ATG -tax /db/kmerfinder/bacteria/bacteria.tax -x -kp /opt/docker/kma/
     cp kmerfider_out/results.spa .
     cp kmerfider_out/results.txt .
   
@@ -2255,7 +2257,7 @@ process run_alphafold {
     tuple val(x), path(gff), path(faa), path(ffn), path(tsv), val(SPECIES), val(GENUS), val(QC_status), val(QC_status_contaminations)
 
     output:
-    tuple val(x), path("${x}_gyrase_complex.pdb"), emit: to_pubdir // return any number of pdbs produce by this module
+    tuple val(x), path("${x}*.pdb"), emit: to_pubdir // return any number of pdbs produce by this module
     tuple val(x), path('alphafold.json'), emit: json
 
     script:
@@ -2273,7 +2275,7 @@ process run_alphafold {
                                               --mgnify_database_path="/db/uniref50/uniref50.fasta" \
                                               --small_bfd_database_path="/db/uniref50/uniref50.fasta" \
                                               --template_mmcif_dir="/db/pdb_mmcif/mmcif_files/" \
-                                              --max_template_date="2024-05-14" \
+                                              --max_template_date="2024-01-01" \
                                               --obsolete_pdbs_path="/db/pdb_mmcif/obsolete.dat" \
                                               --use_gpu_relax=true \
                                               --models_to_relax=best \
@@ -3022,7 +3024,7 @@ process run_kmerfinder_nanopore {
     SPECIES=""
     GENUS=""
   else
-    /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /db/kmerfinder/kmerfinder_db/bacteria/bacteria.ATG -tax /db/kmerfinder/kmerfinder_db/bacteria/bacteria.tax -x -kp /opt/docker/kma/
+    /opt/docker/kmerfinder/kmerfinder.py -i $reads -o ./kmerfider_out -db /db/kmerfinder/bacteria/bacteria.ATG -tax /db/kmerfinder/bacteria/bacteria.tax -x -kp /opt/docker/kma/
     cp kmerfider_out/results.spa .
     cp kmerfider_out/results.txt .
   
