@@ -825,8 +825,8 @@ process run_ectyper {
 process run_resfinder {
   container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  
-  cpus 4
+  maxForks 10  
+  cpus 1
   // The process actually, uses a single CPU but it seems there is a problem when too many processes try to access the same data. 
   // "Broken pipe" error appears. Hence, increasing cpus with this directive artificially decreases the number of processes that can run concurrently. 
   tag "Predicting microbial resistance for sample $x"
@@ -1411,7 +1411,7 @@ process run_kraken2_illumina {
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken_*.txt"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   cpus { params.threads > 10 ? 10 : params.threads }
-  memory '80 GB'
+  memory '100 GB'
 
   input:
   tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
@@ -2197,7 +2197,7 @@ process run_amrfinder {
   tag "Predicting microbial resistance with AMRfinder for sample $x"
   // publishDir "pipeline_wyniki/${x}/AMRplus_fider", mode: 'copy', pattern: "AMRfinder*"
   // publishDir "pipeline_wyniki/${x}/json_output", mode: 'copy', pattern: 'amrfinder.json'
-  containerOptions "--volume ${params.db_absolute_path_on_host}/amrfider_plus:/AMRfider"
+  containerOptions "--volume ${params.db_absolute_path_on_host}/amrfinder_plus:/AMRfider"
   cpus 1
   input:
   tuple val(x), path(fasta), val(QC_status), val(SPECIES), val(GENUS), val(QC_status_contaminations)
@@ -2958,7 +2958,7 @@ process run_kraken2_nanopore {
   // publishDir "pipeline_wyniki/${x}/kraken2", mode: 'copy', pattern: "Summary_kraken*.txt"
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
   cpus { params.threads > 10 ? 10 : params.threads }
-  memory '80 GB'
+  memory '100 GB'
 
   input:
   tuple val(x), path(reads), val(QC_STATUS), val(TOTAL_BASES)
