@@ -1838,7 +1838,19 @@ with open('parsed_phiercc_minimum_spanning_tree.txt', 'w') as f, gzip.open(f'{di
             f.write(f'{ST_sample}\\t{formatted_string}\\n')
             # nie ma potrzeby dalszego ogladania pliku
             break
-    # json
+    # check if lista_poziomow exists, in case user have a novel profiles list from enterobase, but phierCC data are obsolete and do not 
+    # include novel ST
+    try:
+        print(lista_poziomow)
+    except NameError:
+        if re.findall('Salmo', species):
+            lista_poziomow = ["-1"] * 13
+        elif re.findall('Escher', species):
+            lista_poziomow = ["-1"] * 13
+        elif re.findall('jejun', species):
+            lista_poziomow = ["-1"] * 6
+        formatted_string = "\\t".join(list(map(str, lista_poziomow)))
+        f.write(f'{ST_sample}\\t{formatted_string}\\n')
     list_to_dump = []
     # header ma slowo ST w nazwie ktore omijamu
     for level_name, level_value in zip(phiercc_header.split("\\t")[1:], lista_poziomow):
@@ -1881,10 +1893,21 @@ with open('parsed_phiercc_maximum_spanning_tree.txt', 'w') as f, gzip.open(f'{di
                 lista_poziomow[:(last_index + 1)] = [ST_sample] * (last_index +1)
             except IndexError:
                 pass 
-            formatted_string = "\t".join(list(map(str, lista_poziomow)))
+            formatted_string = "\\t".join(list(map(str, lista_poziomow)))
             f.write(f'{ST_sample}\\t{formatted_string}\\n')
             # nie ma potrzeby dalszego ogladania pliku
             break
+    try:
+        print(lista_poziomow)
+    except NameError:
+        if re.findall('Salmo', species):
+            lista_poziomow = ["-1"] * 13
+        elif re.findall('Escher', species):
+            lista_poziomow = ["-1"] * 13
+        elif re.findall('jejun', species):
+            lista_poziomow = ["-1"] * 6
+        formatted_string = "\t".join(list(map(str, lista_poziomow)))
+        f.write(f'{ST_sample}\\t{formatted_string}\\n')
 """
 }
 
