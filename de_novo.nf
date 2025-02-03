@@ -1702,7 +1702,15 @@ STs_data = np.load(f'{directory}/sts_table.npy', allow_pickle=True).item()
 
 # Matching ST must be in the data
 
-lista_poziomow = [STs_data[ST_matching][level] for level in lista_kluczy]
+# in case pubmlst data were not updated 
+# STs_data might not include ST_matching from profile file and we get KeyError
+# for now we just copy -1 mutliple times, like in case of enterobase local files
+
+try:
+    lista_poziomow = [STs_data[ST_matching][level] for level in lista_kluczy]
+except KeyError:
+    lista_poziomow = [int(-1)] * len(lista_kluczy)
+
 try:
     last_index = np.where(list(map(lambda x: int(re.findall('\\d+', x)[0]) < my_dist, lista_kluczy)))[0][-1]
     lista_poziomow[:(last_index + 1)] = [ST_sample] * (last_index +1)
