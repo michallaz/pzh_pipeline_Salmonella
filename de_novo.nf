@@ -825,10 +825,11 @@ process run_ectyper {
 process run_resfinder {
   container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  maxForks 6  
+  maxForks 5
+  maxRetries 5
+  errorStrategy 'retry'  
   cpus 1
-  // The process  uses a single CPU but it seems there is a problem when too many instances of this modue try to access the same data. 
-  // "Broken pipe" error appears. maxForks might solve it, resfinder is quick co this should not slow down the pipeline
+  // The process  uses a single CPU but it seems there is a problem when too many instances of this modue try to access the same data. "Broken pipe" error appears. maxForks might solve it.
   tag "Predicting microbial resistance for sample $x"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/ResFinder_results_table.txt"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/pheno_table_*.txt"

@@ -835,11 +835,12 @@ process run_ectyper {
 process run_resfinder {
   container  = params.main_image
   containerOptions "--volume ${params.db_absolute_path_on_host}:/db"
-  maxForks 10  
   cpus 1
+  maxForks 5
+  maxRetries 5
+  errorStrategy 'retry'
   memory "20 GB"
-  // The process actually, uses a single CPU but it seems there is a problem when too many processes try to access the same data. 
-  // "Broken pipe" error appears. Hence, increasing cpus with this directive artificially decreases the number of processes that can run concurrently. 
+  // The process actually, uses a single CPU but it seems there is a problem when too many processes try to access the same data. Broken pipe" error appears 
   tag "Predicting microbial resistance for sample $x"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/ResFinder_results_table.txt"
   // publishDir "pipeline_wyniki/${x}/", mode: 'copy', pattern: "resfinder/pheno_table_*.txt"
